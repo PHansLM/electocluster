@@ -1,0 +1,66 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv_clustering/
+venv/
+.venv/
+env/
+ENV/
+venv*/
+pip-wheel-metadata/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Installed packages (local venv layout)
+Lib/
+Lib/site-packages/
+*/site-packages/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data and results (do not commit raw datasets or large outputs)
+data/raw/
+data/processed/
+results/
+
+# Environment files
+.env
+.env.*
+
+# Editor / OS files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+.DS_Store
+Thumbs.db
+
+# Logs, coverage and caches
+*.log
+.coverage
+htmlcov/
+*.sqlite3
+*.db
+.pytest_cache/
+.mypy_cache/
+
+# Compiled extension modules
+*.so
+*.pyd
+*.dll
+
+# Archives
+*.tar.gz
+*.zip
+
+# Keep the requirements file and source tracked
+# (requirements.txt is intentionally NOT ignored)
