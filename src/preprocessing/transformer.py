@@ -64,7 +64,8 @@ class DataTransformer:
         
         # Normalizar cada variable numérica
         for var_code, var_info in TODAS_VARIABLES.items():
-            if var_code not in self.df.columns or var_info['tipo'] != 'numerico':
+            if var_code not in self.df.columns or var_info['tipo'] not in ['numerico']:
+
                 continue
             
             # Aplicar scaler
@@ -112,6 +113,16 @@ class DataTransformer:
                 self.metadata['variables_codificadas'].append(var_code)
                 print(f"  ✓ {var_code} (nominal) codificado con LabelEncoder")
         
+            elif tipo == 'binario':
+                # Mapeas a enteros 0/1 para binarios
+                if 'mapeo_binario' in var_info:
+                    mapeo = var_info['mapeo_binario']
+                    self.df[var_code] = self.df[var_code].map(mapeo).fillna(self.df[var_code])
+                
+                self.df[var_code] = self.df[var_code].astype(int)
+                self.metadata['variables_codificadas'].append(var_code)
+                print(f"  ✓ {var_code} (binario) validado como 0/1")
+
         print(f"✓ Codificación completada ({len(self.metadata['variables_codificadas'])} variables)")
         return self.df
     

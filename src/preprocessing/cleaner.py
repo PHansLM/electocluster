@@ -91,6 +91,10 @@ class DataCleaner:
             
             tipo_var = var_info['tipo']
             estrategia = strategy.get(tipo_var, 'drop')
+
+            if tipo_var == 'binario' and 'mapeo_binario' in var_info:
+                mapeo = var_info['mapeo_binario']
+                self.df[var_code] = self.df[var_code].map(mapeo)
             
             if estrategia == 'median':
                 valor_imputar = self.df[var_code].median()

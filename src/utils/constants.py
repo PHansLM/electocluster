@@ -20,19 +20,21 @@ LAPOP_MISSING_CODES = {
 # VARIABLES DEMOGRÁFICAS SELECCIONADAS
 # ============================================
 
-# Variables de relevancia ALTA (peso 0.80-1.00)
+# Variables de relevancia ALTA según LAPOP Bolivia
 VARIABLES_ALTA = {
     'q2': {
         'nombre': 'Edad',
         'tipo': 'numerico',
         'rango': (18, 120),
-        'peso': 1.00
+        'peso': 1.00,
+        'justificacion': 'Generación del votante'
     },
     'edre': {
         'nombre': 'Nivel educativo',
         'tipo': 'categorico_ordinal',
         'rango': (0, 6),
         'peso': 1.00,
+        'justificacion': 'Determinante sobre tendencias',
         'categorias': {
             0: 'Ninguna',
             1: 'Primaria incompleta',
@@ -48,6 +50,7 @@ VARIABLES_ALTA = {
         'tipo': 'categorico_ordinal',
         'rango': (1001, 1015),
         'peso': 1.00,
+        'justificacion': 'Condición socioeconómica',
         'categorias': {
             1001: '0-600 Bs',
             1002: '601-1400 Bs',
@@ -70,7 +73,8 @@ VARIABLES_ALTA = {
         'nombre': 'Identidad étnica',
         'tipo': 'categorico_nominal',
         'rango': (1, 7),
-        'peso': 0.90,
+        'peso': 0.95,
+        'justificacion': 'Factor de peso en el país',
         'categorias': {
             1: 'Blanca',
             2: 'Mestiza',
@@ -80,21 +84,53 @@ VARIABLES_ALTA = {
             7: 'Otra'
         }
     },
-    'ur': {
-        'nombre': 'Urbano/Rural',
-        'tipo': 'categorico_nominal',
+    'boletidnew': {
+        'nombre': 'Pertenencia indígena',
+        'tipo': 'binario',
         'rango': (1, 2),
-        'peso': 0.85,
+        'peso': 0.95,
+        'justificacion': 'Identidad política diferenciada',
+        'mapeo_binario': {1: 1, 2: 0},  # 1=Sí→1, 2=No→0
         'categorias': {
-            1: 'Urbano',
-            2: 'Rural'
+            0: 'No',
+            1: 'Sí'
+        }
+    },
+    'boletidnewb': {
+        'nombre': 'Pueblo indígena específico',
+        'tipo': 'categorico_nominal',
+        'rango': (1, 8),
+        'peso': 0.95,
+        'justificacion': 'Identidad política diferenciada',
+        'categorias': {
+            1: 'Quechua',
+            2: 'Aymara',
+            3: 'Guaraní',
+            4: 'Chiquitano',
+            5: 'Mojeño',
+            6: 'Afroboliviano',
+            7: 'Otro',
+            8: 'No especifica'
+        }
+    },
+    'ur': {
+        'nombre': 'Ubicación Urbano/Rural',
+        'tipo': 'binario',
+        'rango': (1, 2),
+        'peso': 0.90,
+        'justificacion': 'Patrones regionales para el voto',
+        'mapeo_binario': {1: 1, 2: 0},  # 1=Urbano→1, 2=Rural→0
+        'categorias': {
+            0: 'Rural',
+            1: 'Urbano'
         }
     },
     'ocupoit': {
         'nombre': 'Ocupación',
         'tipo': 'categorico_nominal',
         'rango': (1, 10),
-        'peso': 0.95,
+        'peso': 0.90,
+        'justificacion': 'Clase social y sector económico',
         'categorias': {
             1: 'Directores y gerentes',
             2: 'Profesionales científicos',
@@ -110,59 +146,26 @@ VARIABLES_ALTA = {
     }
 }
 
-# Variables de relevancia MODERADA (peso 0.45-0.65)
-VARIABLES_MODERADA = {
-    # Observación: El cuestinario original tiene 'q1tc' para el genero, pero en el dataset es 'q1tc_r'
+# Variables de relevancia MEDIA según LAPOP Bolivia
+VARIABLES_MEDIA = {
     'q1tc_r': {
         'nombre': 'Género',
         'tipo': 'categorico_nominal',
         'rango': (1, 3),
-        'peso': 0.50,
+        'peso': 0.70,
+        'justificacion': 'Brecha de género política',
         'categorias': {
             1: 'Hombre',
             2: 'Mujer',
             3: 'No binario'
         }
     },
-    'q11n': {
-        'nombre': 'Estado civil',
-        'tipo': 'categorico_nominal',
-        'rango': (1, 6),
-        'peso': 0.55,
-        'categorias': {
-            1: 'Soltero',
-            2: 'Casado',
-            3: 'Unión libre',
-            4: 'Divorciado',
-            5: 'Separado',
-            6: 'Viudo'
-        }
-    },
-    'q12cn': {
-        'nombre': 'Tamaño del hogar',
-        'tipo': 'numerico',
-        'rango': (1, 25),
-        'peso': 0.50
-    }
-}
-
-# Variables de relevancia CONTEXTUAL (peso 0.50-0.75)
-VARIABLES_CONTEXTUAL = {
-    'boletidnew': {
-        'nombre': 'Pertenencia indígena',
-        'tipo': 'categorico_nominal',
-        'rango': (1, 2),
-        'peso': 0.75,
-        'categorias': {
-            1: 'Sí',
-            2: 'No'
-        }
-    },
     'q3cn': {
         'nombre': 'Religión',
         'tipo': 'categorico_nominal',
-        'rango': (1, 11),
-        'peso': 0.80,
+        'rango': (1, 77),
+        'peso': 0.70,
+        'justificacion': 'Valores y posiciones morales',
         'categorias': {
             1: 'Católico',
             2: 'Protestante no evangélico',
@@ -173,10 +176,330 @@ VARIABLES_CONTEXTUAL = {
             11: 'Agnóstico/ateo',
             77: 'Otra'
         }
+    },
+    'q5b': {
+        'nombre': 'Importancia de la religión',
+        'tipo': 'categorico_ordinal',
+        'rango': (1, 4),
+        'peso': 0.70,
+        'justificacion': 'Valores y posiciones morales',
+        'categorias': {
+            1: 'Muy importante',
+            2: 'Algo importante',
+            3: 'Poco importante',
+            4: 'Nada importante'
+        }
+    },
+    # Bienes del hogar (R3-R27)
+    'r3': {
+        'nombre': 'Refrigerador',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'r4a': {
+        'nombre': 'Teléfono celular',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'r6': {
+        'nombre': 'Lavadora',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'r7': {
+        'nombre': 'Microondas',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'r12': {
+        'nombre': 'Agua potable',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'r15': {
+        'nombre': 'Computadora',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'r18n': {
+        'nombre': 'Internet banda ancha',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'r18': {
+        'nombre': 'Internet (general)',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'r16': {
+        'nombre': 'TV pantalla plana',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'r27': {
+        'nombre': 'TV cable/satelital',
+        'tipo': 'binario',
+        'rango': (0, 1),
+        'peso': 0.65,
+        'justificacion': 'Nivel socioeconómico objetivo',
+        'categorias': {0: 'No', 1: 'Sí'}
+    },
+    'leng1': {
+        'nombre': 'Lengua materna',
+        'tipo': 'categorico_nominal',
+        'rango': (1001, 1006),
+        'peso': 0.65,
+        'justificacion': 'Identidad cultural',
+        'categorias': {
+            1001: 'Castellano/español',
+            1002: 'Quechua',
+            1003: 'Aymara',
+            1006: 'Guaraní',
+            1004: 'Otro nativo',
+            1005: 'Otro extranjero'
+        }
+    },
+    'formal': {
+        'nombre': 'Formalidad laboral',
+        'tipo': 'binario',
+        'rango': (1, 2),
+        'peso': 0.65,
+        'justificacion': 'Inserción económica formal',
+        'mapeo_binario': {1: 1, 2: 0},  # 1=Sí→1, 2=No→0
+        'categorias': {
+            0: 'No',
+            1: 'Sí'
+        }
+    },
+    'wf1': {
+        'nombre': 'Programas sociales (general)',
+        'tipo': 'binario',
+        'rango': (1, 2),
+        'peso': 0.65,
+        'justificacion': 'Dependencia del Estado',
+        'mapeo_binario': {1: 1, 2: 0},  # 1=Sí→1, 2=No→0
+        'categorias': {
+            0: 'No',
+            1: 'Sí'
+        }
+    },
+    'bolcct1a': {
+        'nombre': 'Renta Dignidad',
+        'tipo': 'binario',
+        'rango': (1, 2),
+        'peso': 0.65,
+        'justificacion': 'Dependencia del Estado',
+        'mapeo_binario': {1: 1, 2: 0},
+        'categorias': {
+            0: 'No',
+            1: 'Sí'
+        }
+    },
+    'bolcct1b': {
+        'nombre': 'Bono Juancito Pinto',
+        'tipo': 'binario',
+        'rango': (1, 2),
+        'peso': 0.65,
+        'justificacion': 'Dependencia del Estado',
+        'mapeo_binario': {1: 1, 2: 0},
+        'categorias': {
+            0: 'No',
+            1: 'Sí'
+        }
+    },
+    'bolcct1c': {
+        'nombre': 'Bono Juana Azurduy',
+        'tipo': 'binario',
+        'rango': (1, 2),
+        'peso': 0.65,
+        'justificacion': 'Dependencia del Estado',
+        'mapeo_binario': {1: 1, 2: 0},
+        'categorias': {
+            0: 'No',
+            1: 'Sí'
+        }
+    },
+    'estratosec': {
+        'nombre': 'Tamaño de municipio',
+        'tipo': 'categorico_ordinal',
+        'rango': (1, 3),
+        'peso': 0.60,
+        'justificacion': 'Contexto urbano/rural',
+        'categorias': {
+            1: 'Grande (>100,000)',
+            2: 'Mediana (25,000-100,000)',
+            3: 'Pequeña (<25,000)'
+        }
+    },
+    'q12cn': {
+        'nombre': 'Tamaño del hogar',
+        'tipo': 'numerico',
+        'rango': (1, 25),
+        'peso': 0.60,
+        'justificacion': 'Estructura familiar'
+    },
+    'q12bn': {
+        'nombre': 'Niños en el hogar',
+        'tipo': 'numerico',
+        'rango': (0, 25),
+        'peso': 0.60,
+        'justificacion': 'Estructura familiar'
     }
 }
 
-TODAS_VARIABLES = {**VARIABLES_ALTA, **VARIABLES_MODERADA, **VARIABLES_CONTEXTUAL}
+# Variables de relevancia CONTEXTUAL según LAPOP Bolivia
+VARIABLES_CONTEXTUAL = {
+    'gi0n': {
+        'nombre': 'Consumo de noticias',
+        'tipo': 'categorico_ordinal',
+        'rango': (1, 5),
+        'peso': 0.55,
+        'justificacion': 'Acceso a información',
+        'categorias': {
+            1: 'Diariamente',
+            2: 'Algunas veces a la semana',
+            3: 'Algunas veces al mes',
+            4: 'Algunas veces al año',
+            5: 'Nunca'
+        }
+    },
+    'smedia3n': {
+        'nombre': 'Consumo de medios digitales',
+        'tipo': 'categorico_ordinal',
+        'rango': (1, 5),
+        'peso': 0.55,
+        'justificacion': 'Acceso a información',
+        'categorias': {
+            1: 'Diariamente',
+            2: 'Algunas veces a la semana',
+            3: 'Algunas veces al mes',
+            4: 'Algunas veces al año',
+            5: 'Nunca'
+        }
+    },
+    'cp6': {
+        'nombre': 'Participación social (religiosa)',
+        'tipo': 'categorico_ordinal',
+        'rango': (1, 4),
+        'peso': 0.50,
+        'justificacion': 'Capital social',
+        'categorias': {
+            1: 'Una vez a la semana',
+            2: 'Una o dos veces al mes',
+            3: 'Una o dos veces al año',
+            4: 'Nunca'
+        }
+    },
+    'cp7': {
+        'nombre': 'Participación social (padres de familia)',
+        'tipo': 'categorico_ordinal',
+        'rango': (1, 4),
+        'peso': 0.50,
+        'justificacion': 'Capital social',
+        'categorias': {
+            1: 'Una vez a la semana',
+            2: 'Una o dos veces al mes',
+            3: 'Una o dos veces al año',
+            4: 'Nunca'
+        }
+    },
+    'cp8': {
+        'nombre': 'Participación social (comunitaria)',
+        'tipo': 'categorico_ordinal',
+        'rango': (1, 4),
+        'peso': 0.50,
+        'justificacion': 'Capital social',
+        'categorias': {
+            1: 'Una vez a la semana',
+            2: 'Una o dos veces al mes',
+            3: 'Una o dos veces al año',
+            4: 'Nunca'
+        }
+    },
+    'cp13': {
+        'nombre': 'Participación social (política)',
+        'tipo': 'categorico_ordinal',
+        'rango': (1, 4),
+        'peso': 0.50,
+        'justificacion': 'Capital social',
+        'categorias': {
+            1: 'Una vez a la semana',
+            2: 'Una o dos veces al mes',
+            3: 'Una o dos veces al año',
+            4: 'Nunca'
+        }
+    },
+    'q10e': {
+        'nombre': 'Cambio en ingreso',
+        'tipo': 'categorico_ordinal',
+        'rango': (1, 3),
+        'peso': 0.50,
+        'justificacion': 'Movilidad económica percibida',
+        'categorias': {
+            1: 'Aumentó',
+            2: 'Permaneció igual',
+            3: 'Disminuyó'
+        }
+    },
+    'q11n': {
+        'nombre': 'Estado civil',
+        'tipo': 'categorico_nominal',
+        'rango': (1, 6),
+        'peso': 0.50,
+        'justificacion': 'Estructura familiar',
+        'categorias': {
+            1: 'Soltero',
+            2: 'Casado',
+            3: 'Unión libre',
+            4: 'Divorciado',
+            5: 'Separado',
+            6: 'Viudo'
+        }
+    },
+    'leng4': {
+        'nombre': 'Idioma de padres',
+        'tipo': 'categorico_nominal',
+        'rango': (1, 5),
+        'peso': 0.50,
+        'justificacion': 'Transmisión cultural',
+        'categorias': {
+            1: 'Solo castellano',
+            2: 'Castellano e idioma nativo',
+            3: 'Solo idioma nativo',
+            4: 'Castellano e idioma extranjero',
+            5: 'Solo idioma extranjero'
+        }
+    }
+}
+
+TODAS_VARIABLES = {**VARIABLES_ALTA, **VARIABLES_MEDIA, **VARIABLES_CONTEXTUAL}
 
 # ============================================
 # CONFIGURACIÓN DE PREPROCESAMIENTO
@@ -184,7 +507,8 @@ TODAS_VARIABLES = {**VARIABLES_ALTA, **VARIABLES_MODERADA, **VARIABLES_CONTEXTUA
 ESTRATEGIA_MISSING = {
     'numerico': 'median',           # Mediana
     'categorico_ordinal': 'mode',   # Moda
-    'categorico_nominal': 'mode'    # Moda
+    'categorico_nominal': 'mode',   # Moda
+    'binario': 'mode'               # Moda (valor más frecuente: 0 o 1)
 }
 
 METODO_NORMALIZACION = 'minmax'    # 'minmax' o 'standard'
