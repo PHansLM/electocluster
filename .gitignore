@@ -29,6 +29,7 @@ Lib/site-packages/
 
 # Data and results (do not commit raw datasets or large outputs)
 data/raw/
+data/synthetic/
 data/processed/
 results/
 
