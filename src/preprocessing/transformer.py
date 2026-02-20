@@ -33,6 +33,7 @@ class DataTransformer:
         self.metadata = {
             'variables_normalizadas': [],
             'variables_codificadas': [],
+            'variables_recodificadas': [],
             'metodo_normalizacion': None
         }
     
@@ -99,27 +100,55 @@ class DataTransformer:
             
             tipo = var_info['tipo']
             
-            # Categóricas ordinales: Se mantienen sus numeros ordenados, se valida que sean enteros
+            # Categóricas ordinales: Se mantienen sus numeros ordenados, se valida que sean enteros y si son valores o codigos
             if tipo == 'categorico_ordinal':
-                self.df[var_code] = self.df[var_code].astype(int)
+
+                if 'rango' in var_info:
+                    rango_min, rango_max = var_info['rango']
+                    n_categorias = rango_max - rango_min + 1
+
+                    self.df[var_code] = self.df[var_code] - rango_min
+
+                    self.metadata['variables_recodificadas'].append({
+                        'variable': var_code,
+                        'rango_original': f'[{rango_min}, {rango_max}]',
+                        'rango_nuevo': f'[0, {n_categorias-1}]'
+                    })
+
+                    print(f"  ✓ {var_code} recodificado a rango [0, {n_categorias-1}]")
+
+                self.df[var_code] = self.df[var_code].astype(float)
+
+                scaler = MinMaxScaler()
+                self.df[var_code] = scaler.fit_transform(self.df[[var_code]])
+
+                self.scalers[var_code] = scaler
                 self.metadata['variables_codificadas'].append(var_code)
-                print(f"  ✓ {var_code} (ordinal) mantenido como int")
-            
+
+                print(f"  ✓ {var_code} normalizado a [0,1]")
+
+
             # Categóricas nominales: usar LabelEncoder
             elif tipo == 'categorico_nominal':
                 encoder = LabelEncoder()
-                self.df[var_code] = encoder.fit_transform(self.df[var_code].astype(int))
+                self.df[var_code] = encoder.fit_transform(self.df[var_code].astype(str))
+                
+                scaler = MinMaxScaler()
+                self.df[var_code] = scaler.fit_transform(self.df[[var_code]])
+                
                 self.encoders[var_code] = encoder
+                self.scalers[var_code] = scaler
+                
                 self.metadata['variables_codificadas'].append(var_code)
-                print(f"  ✓ {var_code} (nominal) codificado con LabelEncoder")
+                print(f"  ✓ {var_code} (nominal) codificado con LabelEncoder y normalizado")
         
             elif tipo == 'binario':
-                # Mapeas a enteros 0/1 para binarios
+                # Mapea a enteros 0/1 para binarios
                 if 'mapeo_binario' in var_info:
                     mapeo = var_info['mapeo_binario']
                     self.df[var_code] = self.df[var_code].map(mapeo).fillna(self.df[var_code])
                 
-                self.df[var_code] = self.df[var_code].astype(int)
+                self.df[var_code] = self.df[var_code].astype(float)
                 self.metadata['variables_codificadas'].append(var_code)
                 print(f"  ✓ {var_code} (binario) validado como 0/1")
 
