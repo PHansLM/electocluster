@@ -371,7 +371,18 @@ VARIABLES_MEDIA = {
         'rango': (0, 25),
         'peso': 0.60,
         'justificacion': 'Estructura familiar'
-    }
+    },
+    'wealth_index': {
+        'nombre': 'Índice de riqueza material',
+        'tipo': 'numerico',
+        'rango': (0, 10),          # 0 = ningún bien, 10 = todos los bienes R
+        'peso': 0.65,
+        'justificacion': (
+            'Índice compuesto que expresa la riqueza material del hogar - clase aspiracional. '
+            'Suma de 10 bienes del hogar (r3, r4a, r6, r7, r12, r15, r16, r18, r18n, r27). '
+            'Reemplaza las variables R individuales para evitar sobrerepresentación. '
+        )
+    },
 }
 
 # Variables de relevancia CONTEXTUAL según LAPOP Bolivia
@@ -496,7 +507,19 @@ VARIABLES_CONTEXTUAL = {
             4: 'Castellano e idioma extranjero',
             5: 'Solo idioma extranjero'
         }
-    }
+    },
+    'civic_index': {
+        'nombre': 'Índice de participación cívica',
+        'tipo': 'numerico',
+        'rango': (4, 16),          # 4 = nunca participa en nada, 16 = participa semanalmente en todo
+        'peso': 0.50,
+        'justificacion': (
+            'Índice compuesto que expresa la participación en organizaciones sociales. '
+            'Suma invertida de frecuencia de asistencia a 4 organizaciones '
+            '(cp6 religiosa, cp7 padres de familia, cp8 comunitaria, cp13 política). '
+            'Reemplaza las variables CP individuales para evitar sobrerepresentación.'
+        )
+    },
 }
 
 TODAS_VARIABLES = {**VARIABLES_ALTA, **VARIABLES_MEDIA, **VARIABLES_CONTEXTUAL}

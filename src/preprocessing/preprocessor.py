@@ -6,6 +6,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from src.preprocessing.feature_engineering import engineer_features
+from src.utils.constants import PROCESSED_DATA_PATH
+
 from .loader import load_dataset
 from .cleaner import clean_dataset
 from .transformer import transform_dataset
@@ -19,6 +22,7 @@ class DataPreprocessor:
         self.reporter = PreprocessingReporter()
         self.df_raw = None
         self.df_clean = None
+        self.df_engineered = None
         self.df_transformed = None
         
     def run_pipeline(self, filepath: str) -> 'pd.DataFrame':
@@ -45,14 +49,29 @@ class DataPreprocessor:
         )
         self.reporter.add_section('cleaning', clean_report)
         
-        # PASO 3: TRANSFORMACIÓN
-        self.df_transformed, transformer, transform_report = transform_dataset(
+        # PASO 3: FEATURE ENGINEERING
+        self.df_engineered, _, engineering_report = engineer_features(
             self.df_clean,
+            build_wealth=True,
+            wealth_method='sum',            # Alternativa: 'pca'
+            build_civic=True,
+            drop_originals=True
+        )
+        self.reporter.add_section('feature_engineering', engineering_report)
+
+        # PASO 4: TRANSFORMACIÓN
+        self.df_transformed, transformer, transform_report = transform_dataset(
+            self.df_engineered,
             normalize=True,
             encode=True,
             normalization_method='minmax'
         )
         self.reporter.add_section('transformation', transform_report)
+        
+        output_path = Path(PROCESSED_DATA_PATH)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        self.df_transformed.to_csv(output_path, index=False)
+        print(f"\n✓ Dataset procesado guardado en: {output_path}")
         
         return self.df_transformed
     
