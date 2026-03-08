@@ -22,13 +22,6 @@ LAPOP_MISSING_CODES = {
 
 # Variables de relevancia ALTA según LAPOP Bolivia
 VARIABLES_ALTA = {
-    'q2': {
-        'nombre': 'Edad',
-        'tipo': 'numerico',
-        'rango': (18, 120),
-        'peso': 1.00,
-        'justificacion': 'Generación del votante'
-    },
     'edre': {
         'nombre': 'Nivel educativo',
         'tipo': 'categorico_ordinal',
@@ -73,7 +66,7 @@ VARIABLES_ALTA = {
         'nombre': 'Identidad étnica',
         'tipo': 'categorico_nominal',
         'rango': (1, 7),
-        'peso': 0.95,
+        'peso': 0.75,
         'justificacion': 'Factor de peso en el país',
         'categorias': {
             1: 'Blanca',
@@ -88,7 +81,7 @@ VARIABLES_ALTA = {
         'nombre': 'Pertenencia indígena',
         'tipo': 'binario',
         'rango': (1, 2),
-        'peso': 0.95,
+        'peso': 0.70,
         'justificacion': 'Identidad política diferenciada',
         'mapeo_binario': {1: 1, 2: 0},  # 1=Sí→1, 2=No→0
         'categorias': {
@@ -100,7 +93,7 @@ VARIABLES_ALTA = {
         'nombre': 'Pueblo indígena específico',
         'tipo': 'categorico_nominal',
         'rango': (1, 8),
-        'peso': 0.95,
+        'peso': 0.70,
         'justificacion': 'Identidad política diferenciada',
         'categorias': {
             1: 'Quechua',
@@ -113,11 +106,26 @@ VARIABLES_ALTA = {
             8: 'No especifica'
         }
     },
+    'estratopri': {
+        'nombre': 'Ubicacion / Region geográfica',
+        'tipo': 'categorico_nominal',
+        'rango': (1001, 1012),
+        'peso': 0.90,
+        'justificacion': 'Expresa tendencias por economías e identidades regionales',
+        'categorias': {
+            1001: 'La Paz',
+            1002: 'Santa Cruz',
+            1003: 'Cochabamba',
+            1010: 'Beni-Pando',
+            1011: 'Potosí-Oruro',
+            1012: 'Chuquisaca-Tarija'
+        }
+    },
     'ur': {
         'nombre': 'Ubicación Urbano/Rural',
         'tipo': 'binario',
         'rango': (1, 2),
-        'peso': 0.90,
+        'peso': 0.85,
         'justificacion': 'Patrones regionales para el voto',
         'mapeo_binario': {1: 1, 2: 0},  # 1=Urbano→1, 2=Rural→0
         'categorias': {
@@ -129,7 +137,7 @@ VARIABLES_ALTA = {
         'nombre': 'Ocupación',
         'tipo': 'categorico_nominal',
         'rango': (1, 10),
-        'peso': 0.90,
+        'peso': 0.95,
         'justificacion': 'Clase social y sector económico',
         'categorias': {
             1: 'Directores y gerentes',
@@ -148,11 +156,18 @@ VARIABLES_ALTA = {
 
 # Variables de relevancia MEDIA según LAPOP Bolivia
 VARIABLES_MEDIA = {
+    'q2': {
+        'nombre': 'Edad',
+        'tipo': 'numerico',
+        'rango': (18, 120),
+        'peso': 0.65,
+        'justificacion': 'Generación del votante'
+    },
     'q1tc_r': {
         'nombre': 'Género',
         'tipo': 'categorico_nominal',
         'rango': (1, 3),
-        'peso': 0.70,
+        'peso': 0.50,
         'justificacion': 'Brecha de género política',
         'categorias': {
             1: 'Hombre',
@@ -362,7 +377,7 @@ VARIABLES_MEDIA = {
         'nombre': 'Tamaño del hogar',
         'tipo': 'numerico',
         'rango': (1, 25),
-        'peso': 0.60,
+        'peso': 0.50,
         'justificacion': 'Estructura familiar'
     },
     'q12bn': {
@@ -376,9 +391,9 @@ VARIABLES_MEDIA = {
         'nombre': 'Índice de riqueza material',
         'tipo': 'numerico',
         'rango': (0, 10),          # 0 = ningún bien, 10 = todos los bienes R
-        'peso': 0.65,
+        'peso': 0.8,
         'justificacion': (
-            'Índice compuesto que expresa la riqueza material del hogar - clase aspiracional. '
+            'Índice compuesto que expresa la riqueza material del hogar - clase aspiracional. Relacionada a como se percibe el votante a si mismo y sus intereses '
             'Suma de 10 bienes del hogar (r3, r4a, r6, r7, r12, r15, r16, r18, r18n, r27). '
             'Reemplaza las variables R individuales para evitar sobrerepresentación. '
         )
@@ -483,7 +498,7 @@ VARIABLES_CONTEXTUAL = {
         'nombre': 'Estado civil',
         'tipo': 'categorico_nominal',
         'rango': (1, 6),
-        'peso': 0.50,
+        'peso': 0.55,
         'justificacion': 'Estructura familiar',
         'categorias': {
             1: 'Soltero',

@@ -10,7 +10,7 @@ from typing import Optional
 from src.utils import constants
 
 # Constantes
-DEFAULT_WEIGHTS_PATH = Path("schemas/feature_weights.json")
+DEFAULT_WEIGHTS_PATH = Path(__file__).parent / "schemas" / "feature_weights.json"
 DEFAULT_WEIGHT = 0.3
 
 class WeightManager:
