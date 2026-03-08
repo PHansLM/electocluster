@@ -1,14 +1,15 @@
 {
   "features": {
-    "q2": 1.0,
     "edre": 1.0,
     "q10inc": 1.0,
-    "etid": 0.95,
-    "boletidnew": 0.95,
-    "boletidnewb": 0.95,
-    "ur": 0.9,
-    "ocupoit": 0.9,
-    "q1tc_r": 0.7,
+    "etid": 0.75,
+    "boletidnew": 0.7,
+    "boletidnewb": 0.7,
+    "estratopri": 0.9,
+    "ur": 0.85,
+    "ocupoit": 0.95,
+    "q2": 0.65,
+    "q1tc_r": 0.5,
     "q3cn": 0.7,
     "q5b": 0.7,
     "r3": 0.65,
@@ -28,9 +29,9 @@
     "bolcct1b": 0.65,
     "bolcct1c": 0.65,
     "estratosec": 0.6,
-    "q12cn": 0.6,
+    "q12cn": 0.5,
     "q12bn": 0.6,
-    "wealth_index": 0.65,
+    "wealth_index": 0.8,
     "gi0n": 0.55,
     "smedia3n": 0.55,
     "cp6": 0.5,
@@ -38,14 +39,14 @@
     "cp8": 0.5,
     "cp13": 0.5,
     "q10e": 0.5,
-    "q11n": 0.5,
+    "q11n": 0.55,
     "leng4": 0.5,
     "civic_index": 0.5
   },
   "metadata": {
-    "total_features": 41,
+    "total_features": 42,
     "initialized_from": "constants",
     "default_weight": 0.3,
-    "initialization_time": "2026-02-25T12:32:07.187922"
+    "initialization_time": "2026-03-07T00:32:43.617643"
   }
 }
