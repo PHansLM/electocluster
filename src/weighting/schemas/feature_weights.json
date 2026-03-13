@@ -5,8 +5,8 @@
     "etid": 0.75,
     "boletidnew": 0.7,
     "boletidnewb": 0.7,
-    "estratopri": 0.9,
-    "ur": 0.85,
+    "estratopri": 0.85,
+    "ur": 0.9,
     "ocupoit": 0.95,
     "q2": 0.65,
     "q1tc_r": 0.5,
@@ -47,6 +47,6 @@
     "total_features": 42,
     "initialized_from": "constants",
     "default_weight": 0.3,
-    "initialization_time": "2026-03-07T20:21:12.341914"
+    "initialization_time": "2026-03-12T23:09:07.799385"
   }
 }

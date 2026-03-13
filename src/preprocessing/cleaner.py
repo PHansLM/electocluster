@@ -144,7 +144,6 @@ class DataCleaner:
         
         return self.df
     
-    # REVISAR: Vale la pena este método?
     def detect_outliers(self, method: str = 'iqr', threshold: float = 1.5) -> dict:
         """
         Detecta valores atípicos en variables numéricas.

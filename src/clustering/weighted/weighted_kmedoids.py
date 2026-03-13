@@ -18,7 +18,7 @@ class WKMedoids(BaseClusterer):
     
     Attributes:
         n_clusters (int): Número de clusters a encontrar
-        metric (str): Métrica de distancia ('euclidean', 'manhattan')
+        metric (str): Métrica de distancia ('precomputed')
         method (str): Método de inicialización ('pam', 'alternate', 'build')
         max_iter (int): Número max de iteraciones
         random_state (int): Semilla para reproducibilidad
@@ -30,7 +30,7 @@ class WKMedoids(BaseClusterer):
     def __init__(
         self,
         n_clusters: int = 3,
-        metric: str = 'manhattan',
+        metric: str = 'precomputed',
         method: str = 'pam',
         max_iter: int = 300,
         random_state: Optional[int] = 42,
@@ -41,7 +41,7 @@ class WKMedoids(BaseClusterer):
         
         Args:
             n_clusters: Número de clusters (default: 3)
-            metric: Métrica de distancia (default: 'euclidean')
+            metric: Métrica de distancia (default: 'precomputed')
             method: Método de inicialización (default: 'pam')
             max_iter: Iteraciones máximas (default: 300)
             random_state: Semilla aleatoria (default: 42)
@@ -66,7 +66,7 @@ class WKMedoids(BaseClusterer):
         # Inicialización del modelo base de scikit-learn
         self._model = SKLearnKMedoids(
             n_clusters=n_clusters,
-            metric=metric,
+            metric='precomputed',
             method=method,
             max_iter=max_iter,
             random_state=random_state
@@ -91,9 +91,11 @@ class WKMedoids(BaseClusterer):
         X_array = X.values if isinstance(X, pd.DataFrame) else X
         
         weights_array = self.weight_manager.get_weights_array(feature_order=X.columns.tolist())
-        X_array = X_array * weights_array
+        diff = X_array[:, np.newaxis, :] - X_array[np.newaxis, :, :]
+        dist_matrix = np.sqrt(np.sum(weights_array * diff**2, axis=2))
+        
         # Entrenamiento del modelo
-        self._model.fit(X_array)
+        self._model.fit(dist_matrix)         
         
         # Extraer resultados
         self.labels_ = self._model.labels_
@@ -105,6 +107,8 @@ class WKMedoids(BaseClusterer):
         print(f"✓ WK-Medoids entrenado: {self.n_clusters_} clusters identificados")
         print(f"  Inercia: {self.inertia_:.4f}")
         
+        self.X_train_ = X_array
+
         return self
     
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -122,9 +126,10 @@ class WKMedoids(BaseClusterer):
         X_array = X.values if isinstance(X, pd.DataFrame) else X
         
         weights_array = self.weight_manager.get_weights_array(feature_order=X.columns.tolist())
-        X_array = X_array * weights_array
-        
-        return self._model.predict(X_array)
+        diff = X_array[:, np.newaxis, :] - self.X_train_[np.newaxis, :, :]
+        dist_matrix = np.sqrt(np.sum(weights_array * diff**2, axis=2))
+
+        return self._model.predict(dist_matrix)
     
     def get_medoids(self, X: pd.DataFrame) -> pd.DataFrame:
         """

@@ -110,7 +110,7 @@ VARIABLES_ALTA = {
         'nombre': 'Ubicacion / Region geográfica',
         'tipo': 'categorico_nominal',
         'rango': (1001, 1012),
-        'peso': 0.90,
+        'peso': 0.85,
         'justificacion': 'Expresa tendencias por economías e identidades regionales',
         'categorias': {
             1001: 'La Paz',
@@ -125,7 +125,7 @@ VARIABLES_ALTA = {
         'nombre': 'Ubicación Urbano/Rural',
         'tipo': 'binario',
         'rango': (1, 2),
-        'peso': 0.85,
+        'peso': 0.90,
         'justificacion': 'Patrones regionales para el voto',
         'mapeo_binario': {1: 1, 2: 0},  # 1=Urbano→1, 2=Rural→0
         'categorias': {
