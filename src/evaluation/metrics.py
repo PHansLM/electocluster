@@ -14,6 +14,8 @@ from sklearn.metrics import (
 from typing import Dict, Any, Optional
 import warnings
 
+from src.weighting.weight_manager import WeightManager
+
 
 class ClusteringMetrics:
     """
@@ -353,3 +355,19 @@ def calculate_metrics(
     """
     evaluator = ClusteringMetrics()
     return evaluator.calculate_all(X, labels, metric)
+
+def calculate_metrics_weighted(
+    X: pd.DataFrame,
+    labels: np.ndarray,
+    weight_manager: WeightManager,
+    metric: str = 'euclidean'
+) -> Dict[str, float]:
+    """
+    Helper para calcular métricas en el espacio ponderado.
+    Útil para mostrar como es que el algoritmo ponderado percibe los elementos del dataset y la distancia entre ellos, justificado las agrupaciones
+    No aplicable a todos los algoritmos ni comparaciones
+    """
+    weights = weight_manager.get_weights_array(feature_order=X.columns.tolist())
+    X_weighted = X * weights
+    evaluator = ClusteringMetrics()
+    return evaluator.calculate_all(X_weighted, labels, metric)

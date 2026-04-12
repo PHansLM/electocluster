@@ -5,11 +5,11 @@ Proporciona implementaciones de Weighted K-Medoids, Weighted Hierachical Cluster
 """
 
 from .weighted_kmedoids import WKMedoids
-#from .weighted_hierarchical import HierarchicalClustering
-#from .weighted_dbscan import DBSCAN
+from .weighted_hierarchical import WeightedHierarchicalClustering
+from .weighted_dbscan import WDBSCAN
 
 __all__ = [
     'WKMedoids'
- #   'WHierarchicalClustering',
- #   'WDBSCANR'
+    'WeightedHierarchicalClustering',
+    'WDBSCAN'
 ]
