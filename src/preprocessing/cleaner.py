@@ -70,7 +70,6 @@ class DataCleaner:
         
         Args:
             strategy (dict): Estrategia de imputación por tipo de variable.
-                            Si es None, usa ESTRATEGIA_MISSING.
         
         Return:
             pd.DataFrame: Dataset con missings imputados.
@@ -79,7 +78,17 @@ class DataCleaner:
             strategy = ESTRATEGIA_MISSING
         
         print("Imputando valores faltantes...")
-        
+
+        # REGLAS PARA VARIABLES DEPENDIENTES
+        if 'boletidnew' in self.df.columns and 'boletidnewb' in self.df.columns:
+            
+            # 2 = No indígena → categoría 0
+            self.df.loc[self.df['boletidnew'] == 2, 'boletidnewb'] = 0
+
+            # 1 = Sí indígena pero categoría 0 → inconsistente → 8
+            mask_inconsistente = (self.df['boletidnew'] == 1) & (self.df['boletidnewb'] == 0)
+            self.df.loc[mask_inconsistente, 'boletidnewb'] = 8
+
         for var_code, var_info in TODAS_VARIABLES.items():
             if var_code not in self.df.columns:
                 continue

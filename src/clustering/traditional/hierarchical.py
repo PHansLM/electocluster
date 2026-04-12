@@ -99,8 +99,8 @@ class HierarchicalClustering(BaseClusterer):
     
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """
-        Asigna al cluster del punto más cercano.
-        
+        NO soportado nativamente
+
         Args:
             X: Datos a predecir
             

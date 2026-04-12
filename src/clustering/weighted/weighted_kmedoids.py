@@ -14,7 +14,7 @@ from ..base import BaseClusterer
 
 class WKMedoids(BaseClusterer):
     """
-    K-Medoids tradicional
+    K-Medoids ponderado
     
     Attributes:
         n_clusters (int): Número de clusters a encontrar
@@ -24,7 +24,7 @@ class WKMedoids(BaseClusterer):
         random_state (int): Semilla para reproducibilidad
         medoid_indices_ (np.ndarray): Índices de los medoides finales
         inertia_ (float): Suma de distancias al medoide más cercano (compacidad)
-        w
+
     """
     
     def __init__(
@@ -48,7 +48,7 @@ class WKMedoids(BaseClusterer):
         """
         params = {
             'n_clusters': n_clusters,
-            'metric': metric,
+            'metric': 'precomputed',
             'method': method,
             'max_iter': max_iter,
             'random_state': random_state,
@@ -66,7 +66,7 @@ class WKMedoids(BaseClusterer):
         # Inicialización del modelo base de scikit-learn
         self._model = SKLearnKMedoids(
             n_clusters=n_clusters,
-            metric='precomputed',
+            metric=metric,
             method=method,
             max_iter=max_iter,
             random_state=random_state
@@ -89,6 +89,14 @@ class WKMedoids(BaseClusterer):
         
         # Conversion a array
         X_array = X.values if isinstance(X, pd.DataFrame) else X
+    
+        if self.weight_manager is not None:
+            weights_array = self.weight_manager.get_weights_array(
+                feature_order=X.columns.tolist()
+            )
+        else:
+            weights_array = np.ones(X_array.shape[1])
+
         
         weights_array = self.weight_manager.get_weights_array(feature_order=X.columns.tolist())
         diff = X_array[:, np.newaxis, :] - X_array[np.newaxis, :, :]
@@ -125,7 +133,13 @@ class WKMedoids(BaseClusterer):
         
         X_array = X.values if isinstance(X, pd.DataFrame) else X
         
-        weights_array = self.weight_manager.get_weights_array(feature_order=X.columns.tolist())
+        if self.weight_manager is not None:
+            weights_array = self.weight_manager.get_weights_array(
+                feature_order=X.columns.tolist()
+            )
+        else:
+            weights_array = np.ones(X_array.shape[1])
+            
         diff = X_array[:, np.newaxis, :] - self.X_train_[np.newaxis, :, :]
         dist_matrix = np.sqrt(np.sum(weights_array * diff**2, axis=2))
 

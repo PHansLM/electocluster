@@ -92,10 +92,11 @@ VARIABLES_ALTA = {
     'boletidnewb': {
         'nombre': 'Pueblo indígena específico',
         'tipo': 'categorico_nominal',
-        'rango': (1, 8),
+        'rango': (0, 8),
         'peso': 0.70,
         'justificacion': 'Identidad política diferenciada',
         'categorias': {
+            0: 'Ninguno (no indígena)',
             1: 'Quechua',
             2: 'Aymara',
             3: 'Guaraní',
