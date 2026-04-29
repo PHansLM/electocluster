@@ -315,7 +315,7 @@ VARIABLES_MEDIA = {
         }
     },
     'wf1': {
-        'nombre': 'Programas sociales (general)',
+        'nombre': 'Programas sociales / bonos (general)',
         'tipo': 'binario',
         'rango': (1, 2),
         'peso': 0.65,
