@@ -82,3 +82,21 @@ class DataPreprocessor:
     def get_validation_summary(self) -> dict:
         """Retorna resumen de validación"""
         return self.reporter.get_summary()
+
+
+def run_pipeline(filepath: str, output_report_path: str = None):
+    """
+    Funcion de conveniencia compatible con imports antiguos.
+
+    Args:
+        filepath: Ruta al archivo .dta de LAPOP.
+        output_report_path: Ruta opcional para guardar el reporte JSON.
+
+    Returns:
+        DataFrame procesado listo para clustering.
+    """
+    preprocessor = DataPreprocessor()
+    df = preprocessor.run_pipeline(filepath)
+    if output_report_path is not None:
+        preprocessor.generate_report(output_report_path)
+    return df

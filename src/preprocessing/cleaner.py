@@ -249,3 +249,34 @@ def clean_dataset(df: pd.DataFrame,
         cleaner.detect_outliers()
     
     return cleaner.df, cleaner.get_cleaning_report()
+
+
+def clean_dataset_configured(df: pd.DataFrame,
+                             validate_ranges: bool = True,
+                             handle_missing: bool = True,
+                             remove_incomplete: bool = False,
+                             incomplete_threshold: float = 0.5,
+                             detect_outliers_flag: bool = True,
+                             outlier_method: str = 'iqr',
+                             outlier_threshold: float = 1.5) -> tuple:
+    """
+    Variante configurable para la interfaz de iteracion 5.
+
+    Mantiene clean_dataset() con su comportamiento historico para notebooks
+    ya documentados, y concentra aqui los parametros nuevos de la UI.
+    """
+    cleaner = DataCleaner(df)
+
+    if validate_ranges:
+        cleaner.validate_ranges()
+
+    if remove_incomplete:
+        cleaner.remove_incomplete_records(threshold=incomplete_threshold)
+
+    if handle_missing:
+        cleaner.handle_missing_values()
+
+    if detect_outliers_flag:
+        cleaner.detect_outliers(method=outlier_method, threshold=outlier_threshold)
+
+    return cleaner.df, cleaner.get_cleaning_report()

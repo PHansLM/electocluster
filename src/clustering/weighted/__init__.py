@@ -9,7 +9,7 @@ from .weighted_hierarchical import WeightedHierarchicalClustering
 from .weighted_dbscan import WDBSCAN
 
 __all__ = [
-    'WKMedoids'
+    'WKMedoids',
     'WeightedHierarchicalClustering',
     'WDBSCAN'
 ]
