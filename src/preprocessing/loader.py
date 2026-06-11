@@ -24,7 +24,7 @@ class DatasetLoader:
     def __init__(self, file_path: str = None):
         """
         Args:
-            file_path (str): Ruta al dataset en .dta
+            file_path (str): Ruta al dataset en .dta o .csv
         """
         self.file_path = file_path or RAW_DATA_PATH
         self.df = None
@@ -32,7 +32,7 @@ class DatasetLoader:
         
     def load(self) -> pd.DataFrame:
         """
-        Carga el dataset desde el archivo .dta
+        Carga el dataset desde el archivo .dta o .csv
         
         Return:
             pd.DataFrame: Dataset cargado.
@@ -43,7 +43,13 @@ class DatasetLoader:
         """
         try:
             print(f"Cargando dataset desde: {self.file_path}")
-            self.df = pd.read_stata(self.file_path, convert_categoricals=False)
+            suffix = Path(self.file_path).suffix.lower()
+            if suffix == ".dta":
+                self.df = pd.read_stata(self.file_path, convert_categoricals=False)
+            elif suffix == ".csv":
+                self.df = pd.read_csv(self.file_path)
+            else:
+                raise ValueError("Formato no soportado. Usa archivos .dta o .csv.")
             
             # Metadata básica
             self.metadata['n_registros'] = len(self.df)
@@ -167,7 +173,7 @@ def load_dataset(file_path: str = None) -> tuple:
     Función de conveniencia para cargar el dataset completo.
     
     Args:
-        file_path (str): Ruta al archivo .dta.
+        file_path (str): Ruta al archivo .dta o .csv.
         
     Return:
         tuple: (DataFrame procesado, metadata del loader)
