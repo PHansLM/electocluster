@@ -28,24 +28,46 @@ st.set_page_config(page_title="Configuración · ElectoCluster", layout="wide")
 
 ALGORITHMS = ["WKMedoids", "W-Hierarchical Clustering", "W-DBSCAN"]
 
-st.title("Configuración de Algoritmo")
+st.title("Configuración de Algoritmos")
 st.markdown(
-    "Selecciona el algoritmo de clustering, ajusta parámetros manualmente o "
-    "calcula una recomendación automática sobre el dataset procesado activo."
+    "Edita y guarda la configuración activa de cada algoritmo. La ejecución se "
+    "realiza después desde la página de Ejecución, donde puedes correr una o varias "
+    "configuraciones."
 )
+
+
+def _params_store() -> dict:
+    store = st.session_state.get("params_by_algorithm")
+    if not isinstance(store, dict):
+        store = {}
+    for algo in ALGORITHMS:
+        defaults = default_params(algo)
+        saved = store.get(algo, {})
+        store[algo] = {**defaults, **{key: value for key, value in saved.items() if key in defaults}}
+    st.session_state["params_by_algorithm"] = store
+    return store
 
 
 def _current_params_for(algorithm: str) -> dict:
     defaults = default_params(algorithm)
-    session_params = st.session_state.get("params", {})
+    session_params = _params_store().get(algorithm, {})
     return {**defaults, **{key: value for key, value in session_params.items() if key in defaults}}
+
+
+def _save_active_params(algorithm: str, params: dict):
+    store = _params_store()
+    defaults = default_params(algorithm)
+    clean_params = {**defaults, **{key: value for key, value in params.items() if key in defaults}}
+    store[algorithm] = clean_params
+    st.session_state["params_by_algorithm"] = store
+    st.session_state["params"] = clean_params
 
 
 def _display_search_result(result):
     result_dict = asdict(result)
     st.session_state["last_param_search"] = result_dict
     st.session_state["last_param_search_algorithm"] = result.algorithm
-    st.session_state["params"] = result.best_params
+    _save_active_params(result.algorithm, result.best_params)
 
 
 def _format_results_table(rows: list[dict]) -> pd.DataFrame:
@@ -61,10 +83,10 @@ def _format_results_table(rows: list[dict]) -> pd.DataFrame:
     return df
 
 
-st.markdown("### Algoritmo")
+st.markdown("### Algoritmo a configurar")
 
 algorithm = st.radio(
-    label="Selecciona el algoritmo ponderado a ejecutar:",
+    label="Selecciona la configuración que quieres editar:",
     options=ALGORITHMS,
     index=st.session_state.get("algoritmo_idx", 0),
     horizontal=True,
@@ -167,141 +189,168 @@ else:
         icon=":material/warning:",
     )
 
-st.session_state["params"] = params
+_save_active_params(algorithm, params)
 
 st.markdown("---")
-st.markdown("### Cálculo automático de parámetros")
+st.markdown("### Asistente de parámetros")
 st.caption(
-    "La búsqueda se ejecuta sobre una muestra reproducible del dataset procesado activo. "
-    "Esto evita bloquear la interfaz por el costo de matrices de distancia completas."
+    "La configuración manual queda guardada de inmediato. Abre el asistente solo si "
+    "quieres calcular una recomendación automática para este algoritmo."
 )
 
-try:
-    df_processed = load_processed_dataset()
-    dataset_ready = True
-    st.success(
-        f"Dataset activo disponible: {len(df_processed):,} registros x {len(df_processed.columns)} variables.",
-        icon=":material/check_circle:",
-    )
-except Exception as exc:
-    df_processed = None
-    dataset_ready = False
-    st.error(str(exc), icon=":material/error:")
-
-search_cols = st.columns([1, 1, 1])
-with search_cols[0]:
-    sample_default = 500 if algorithm == "W-DBSCAN" else 300
-    sample_size = st.number_input(
-        "Tamaño de muestra",
-        min_value=100,
-        max_value=1000,
-        value=sample_default,
-        step=50,
-        help="Usa una muestra menor si el equipo tiene poca memoria disponible.",
-    )
-with search_cols[1]:
-    random_state = st.number_input(
-        "Semilla de búsqueda",
-        min_value=0,
-        max_value=999,
-        value=int(params.get("random_state", 42)),
-    )
-
-if algorithm in ["WKMedoids", "W-Hierarchical Clustering"]:
-    with search_cols[2]:
-        k_min = st.number_input("k mínimo", min_value=2, max_value=20, value=2)
-    k_max = st.slider("k máximo a explorar", min_value=int(k_min), max_value=20, value=8)
-    k_values = list(range(int(k_min), int(k_max) + 1))
-else:
-    with search_cols[2]:
-        variance_target = st.slider(
-            "Varianza PCA objetivo",
-            min_value=0.60,
-            max_value=0.95,
-            value=0.85,
-            step=0.05,
-        )
-    k_values = []
-
-if algorithm == "W-Hierarchical Clustering":
-    linkages_to_search = st.multiselect(
-        "Linkages a explorar",
-        options=["complete", "average", "single"],
-        default=["complete", "average"],
-    )
-else:
-    linkages_to_search = []
-
-run_search = st.button(
-    "Calcular parámetros recomendados",
-    type="secondary",
-    icon=":material/tune:",
-    disabled=not dataset_ready,
+show_param_search = st.session_state.get("show_param_search", False)
+toggle_label = (
+    "Ocultar cálculo automático"
+    if show_param_search
+    else "Abrir cálculo automático"
 )
-
-if run_search and dataset_ready:
-    with st.spinner("Calculando recomendación de parámetros..."):
-        wm = WeightManager()
-        if algorithm == "WKMedoids":
-            search_result = optimize_wkmedoids_params(
-                df_processed,
-                weight_manager=wm,
-                k_values=k_values,
-                sample_size=int(sample_size),
-                random_state=int(random_state),
-            )
-        elif algorithm == "W-Hierarchical Clustering":
-            search_result = optimize_whierarchical_params(
-                df_processed,
-                weight_manager=wm,
-                k_values=k_values,
-                linkages=linkages_to_search or ["complete"],
-                sample_size=int(sample_size),
-                random_state=int(random_state),
-            )
-        else:
-            search_result = optimize_wdbscan_params(
-                df_processed,
-                weight_manager=wm,
-                sample_size=int(sample_size),
-                random_state=int(random_state),
-                variance_target=float(variance_target),
-            )
-
-    _display_search_result(search_result)
+toggle_icon = ":material/close:" if show_param_search else ":material/tune:"
+if st.button(toggle_label, type="secondary", icon=toggle_icon):
+    st.session_state["show_param_search"] = not show_param_search
     st.rerun()
 
-last_result = st.session_state.get("last_param_search")
-if last_result and st.session_state.get("last_param_search_algorithm") == algorithm:
-    st.markdown("#### Última recomendación")
-    col_best, col_criterion, col_sample = st.columns([1.2, 1.4, 1])
-    col_best.json(last_result["best_params"])
-    col_criterion.metric("Criterio", last_result["criterion"])
-    col_sample.metric("Muestra evaluada", last_result["sample_size"])
+if st.session_state.get("show_param_search", False):
+    with st.container(border=True):
+        panel_intro, panel_dataset = st.columns([1.6, 1])
+        with panel_intro:
+            st.markdown("#### Recomendación automática")
+            st.caption(
+                "Explora parámetros sobre una muestra reproducible del dataset procesado. "
+                "Úsalo como apoyo para guardar una configuración activa, no como ejecución final."
+            )
 
-    for note in last_result.get("notes", []):
-        st.caption(note)
+        try:
+            df_processed = load_processed_dataset()
+            dataset_ready = True
+            dataset_error = ""
+        except Exception as exc:
+            df_processed = None
+            dataset_ready = False
+            dataset_error = str(exc)
 
-    result_table = _format_results_table(last_result.get("rows", []))
-    if result_table.empty:
-        st.warning(
-            "La búsqueda no produjo métricas válidas. Ajusta muestra o rangos.",
-            icon=":material/warning:",
+        with panel_dataset:
+            if dataset_ready:
+                st.metric("Registros", f"{len(df_processed):,}")
+                st.metric("Variables", len(df_processed.columns))
+            else:
+                st.error(dataset_error, icon=":material/error:")
+
+        st.markdown("##### Alcance de búsqueda")
+        search_cols = st.columns([1, 1, 1])
+        with search_cols[0]:
+            sample_default = 500 if algorithm == "W-DBSCAN" else 300
+            sample_size = st.number_input(
+                "Tamaño de muestra",
+                min_value=100,
+                max_value=1000,
+                value=sample_default,
+                step=50,
+                help="Usa una muestra menor si el equipo tiene poca memoria disponible.",
+            )
+        with search_cols[1]:
+            random_state = st.number_input(
+                "Semilla de búsqueda",
+                min_value=0,
+                max_value=999,
+                value=int(params.get("random_state", 42)),
+            )
+
+        if algorithm in ["WKMedoids", "W-Hierarchical Clustering"]:
+            with search_cols[2]:
+                k_min = st.number_input("k mínimo", min_value=2, max_value=20, value=2)
+            k_max = st.slider("k máximo a explorar", min_value=int(k_min), max_value=20, value=8)
+            k_values = list(range(int(k_min), int(k_max) + 1))
+            variance_target = None
+        else:
+            with search_cols[2]:
+                variance_target = st.slider(
+                    "Varianza PCA objetivo",
+                    min_value=0.60,
+                    max_value=0.95,
+                    value=0.85,
+                    step=0.05,
+                )
+            k_values = []
+
+        if algorithm == "W-Hierarchical Clustering":
+            linkages_to_search = st.multiselect(
+                "Linkages a explorar",
+                options=["complete", "average", "single"],
+                default=["complete", "average"],
+            )
+        else:
+            linkages_to_search = []
+
+        run_search = st.button(
+            "Calcular recomendación",
+            type="primary",
+            icon=":material/play_arrow:",
+            disabled=not dataset_ready,
         )
-    else:
-        st.dataframe(result_table, use_container_width=True, hide_index=True)
+
+        if run_search and dataset_ready:
+            with st.spinner("Calculando recomendación de parámetros..."):
+                wm = WeightManager()
+                if algorithm == "WKMedoids":
+                    search_result = optimize_wkmedoids_params(
+                        df_processed,
+                        weight_manager=wm,
+                        k_values=k_values,
+                        sample_size=int(sample_size),
+                        random_state=int(random_state),
+                    )
+                elif algorithm == "W-Hierarchical Clustering":
+                    search_result = optimize_whierarchical_params(
+                        df_processed,
+                        weight_manager=wm,
+                        k_values=k_values,
+                        linkages=linkages_to_search or ["complete"],
+                        sample_size=int(sample_size),
+                        random_state=int(random_state),
+                    )
+                else:
+                    search_result = optimize_wdbscan_params(
+                        df_processed,
+                        weight_manager=wm,
+                        sample_size=int(sample_size),
+                        random_state=int(random_state),
+                        variance_target=float(variance_target),
+                    )
+
+            _display_search_result(search_result)
+            st.rerun()
+
+        last_result = st.session_state.get("last_param_search")
+        if last_result and st.session_state.get("last_param_search_algorithm") == algorithm:
+            st.markdown("##### Última recomendación")
+            col_best, col_criterion, col_sample = st.columns([1.2, 1.4, 1])
+            col_best.json(last_result["best_params"])
+            col_criterion.metric("Criterio", last_result["criterion"])
+            col_sample.metric("Muestra evaluada", last_result["sample_size"])
+
+            for note in last_result.get("notes", []):
+                st.caption(note)
+
+            result_table = _format_results_table(last_result.get("rows", []))
+            if result_table.empty:
+                st.warning(
+                    "La búsqueda no produjo métricas válidas. Ajusta muestra o rangos.",
+                    icon=":material/warning:",
+                )
+            else:
+                st.dataframe(result_table, use_container_width=True, hide_index=True)
 
 st.markdown("---")
-st.markdown("### Resumen de configuración")
+st.markdown("### Resumen de configuración activa")
 col_alg, col_params = st.columns(2)
 with col_alg:
-    st.metric("Algoritmo seleccionado", algorithm)
+    st.metric("Configuración en edición", algorithm)
 with col_params:
     st.json(st.session_state["params"])
 
-if st.button("Confirmar configuración", type="primary", icon=":material/check:"):
+if st.button("Guardar configuración activa", type="primary", icon=":material/check:"):
     st.success(
         f"Configuración guardada: **{algorithm}** con parámetros `{st.session_state['params']}`. "
-        "Navega a **Ejecución** para entrenar el modelo.",
+        "Navega a **Ejecución** para correr una o varias configuraciones.",
         icon=":material/check_circle:",
     )
