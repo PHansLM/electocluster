@@ -6,6 +6,7 @@ genera reportes comparativos para el Capitulo 8.
 """
 
 import sys
+from html import escape
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -19,8 +20,11 @@ from src.evaluation.execution import load_processed_dataset
 from src.evaluation.report_generator import ReportGenerator
 from src.evaluation.results_manager import RESULTS_PATH, ResultsManager
 from src.visualization import (
+    PROFILE_METADATA_COLUMNS,
     cluster_distribution,
     cluster_profiles,
+    feature_display_name,
+    interpret_feature_value,
     pca_projection,
     save_run_figures,
 )
@@ -84,6 +88,115 @@ def _comparison_label(row: pd.Series) -> str:
     timestamp = row["timestamp"]
     stamp = timestamp.strftime("%d/%m %H:%M") if pd.notna(timestamp) else "sin fecha"
     return f"{row['algorithm']} | {stamp}"
+
+
+def _format_profile_raw(value) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if abs(numeric - round(numeric)) < 1e-9:
+        return str(int(round(numeric)))
+    return f"{numeric:.4f}"
+
+
+def _format_profile_metadata(column: str, value) -> str:
+    if column == "percentage":
+        return f"{float(value):.2f}%"
+    if column in {"cluster", "size"}:
+        return str(int(value))
+    return str(value)
+
+
+def _render_profiles_table(profiles: pd.DataFrame):
+    columns = profiles.columns.tolist()
+    header_cells = []
+    for column in columns:
+        label = column if column in PROFILE_METADATA_COLUMNS else feature_display_name(column)
+        header_cells.append(f"<th>{escape(str(label))}</th>")
+
+    body_rows = []
+    for _, row in profiles.iterrows():
+        cells = []
+        for column in columns:
+            value = row[column]
+            if column in PROFILE_METADATA_COLUMNS:
+                cells.append(f"<td class='profile-meta'>{escape(_format_profile_metadata(column, value))}</td>")
+                continue
+
+            interpretation = interpret_feature_value(column, value)
+            raw_value = _format_profile_raw(interpretation.raw_value)
+            cells.append(
+                "<td>"
+                f"<div class='profile-meaning'>{escape(interpretation.text)}</div>"
+                f"<div class='profile-raw'>({escape(raw_value)})</div>"
+                "</td>"
+            )
+        body_rows.append("<tr>" + "".join(cells) + "</tr>")
+
+    html = """
+    <div class="profile-table-wrap">
+      <table class="profile-table">
+        <thead>
+          <tr>{headers}</tr>
+        </thead>
+        <tbody>
+          {rows}
+        </tbody>
+      </table>
+    </div>
+    <style>
+      .profile-table-wrap {{
+        overflow-x: auto;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 8px;
+      }}
+      .profile-table {{
+        width: max-content;
+        min-width: 100%;
+        border-collapse: collapse;
+        font-size: 0.84rem;
+      }}
+      .profile-table th {{
+        position: sticky;
+        top: 0;
+        text-align: left;
+        padding: 9px 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(148, 163, 184, 0.10);
+        color: #cbd5e1;
+        white-space: nowrap;
+      }}
+      .profile-table td {{
+        min-width: 145px;
+        max-width: 230px;
+        vertical-align: top;
+        padding: 9px 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        border-right: 1px solid rgba(148, 163, 184, 0.10);
+      }}
+      .profile-table tbody tr:last-child td {{
+        border-bottom: none;
+      }}
+      .profile-meta {{
+        min-width: 70px !important;
+        font-weight: 800;
+        color: #f8fafc;
+      }}
+      .profile-meaning {{
+        color: #f8fafc;
+        font-weight: 700;
+        line-height: 1.25;
+      }}
+      .profile-raw {{
+        margin-top: 0.25rem;
+        color: rgba(203, 213, 225, 0.62);
+        font-size: 0.78rem;
+        line-height: 1.2;
+      }}
+    </style>
+    """.format(headers="".join(header_cells), rows="".join(body_rows))
+    st.markdown(html, unsafe_allow_html=True)
 
 
 st.markdown("### Ejecuciones guardadas")
@@ -171,7 +284,7 @@ with tab_profiles:
     if profiles.empty:
         st.warning("No hay perfiles disponibles para este run.")
     else:
-        st.dataframe(profiles, use_container_width=True, hide_index=True)
+        _render_profiles_table(profiles)
         csv = profiles.to_csv(index=False).encode("utf-8")
         st.download_button(
             "Descargar perfiles CSV",
