@@ -10,6 +10,7 @@ from typing import Optional
 from src.weighting.weight_manager import WeightManager
 
 from ..base import BaseClusterer 
+from ._weights import resolve_feature_weights
 
 
 class WKMedoids(BaseClusterer):
@@ -46,6 +47,12 @@ class WKMedoids(BaseClusterer):
             max_iter: Iteraciones máximas (default: 300)
             random_state: Semilla aleatoria (default: 42)
         """
+        if metric != 'precomputed':
+            raise ValueError(
+                "WKMedoids requiere metric='precomputed' para usar la "
+                "distancia ponderada documentada."
+            )
+
         params = {
             'n_clusters': n_clusters,
             'metric': 'precomputed',
@@ -57,7 +64,7 @@ class WKMedoids(BaseClusterer):
         super().__init__(**params)
         
         self.n_clusters = n_clusters
-        self.metric = metric
+        self.metric = 'precomputed'
         self.method = method
         self.max_iter = max_iter
         self.random_state = random_state
@@ -66,7 +73,7 @@ class WKMedoids(BaseClusterer):
         # Inicialización del modelo base de scikit-learn
         self._model = SKLearnKMedoids(
             n_clusters=n_clusters,
-            metric=metric,
+            metric='precomputed',
             method=method,
             max_iter=max_iter,
             random_state=random_state
@@ -74,6 +81,7 @@ class WKMedoids(BaseClusterer):
         
         self.medoid_indices_ = None
         self.inertia_ = None
+        self.feature_names_in_ = None
         
     def fit(self, X: pd.DataFrame) -> 'WKMedoids':
         """
@@ -87,18 +95,10 @@ class WKMedoids(BaseClusterer):
         """
         print(f"Entrenando Weighted K-Medoids con {self.n_clusters} clusters...")
         
-        # Conversion a array
-        X_array = X.values if isinstance(X, pd.DataFrame) else X
-    
-        if self.weight_manager is not None:
-            weights_array = self.weight_manager.get_weights_array(
-                feature_order=X.columns.tolist()
-            )
-        else:
-            weights_array = np.ones(X_array.shape[1])
-
-        
-        weights_array = self.weight_manager.get_weights_array(feature_order=X.columns.tolist())
+        X_array, weights_array, feature_order = resolve_feature_weights(
+            X,
+            self.weight_manager,
+        )
         diff = X_array[:, np.newaxis, :] - X_array[np.newaxis, :, :]
         dist_matrix = np.sqrt(np.sum(weights_array * diff**2, axis=2))
         
@@ -116,6 +116,7 @@ class WKMedoids(BaseClusterer):
         print(f"  Inercia: {self.inertia_:.4f}")
         
         self.X_train_ = X_array
+        self.feature_names_in_ = feature_order
 
         return self
     
@@ -131,14 +132,18 @@ class WKMedoids(BaseClusterer):
         """
         self._check_fitted()
         
-        X_array = X.values if isinstance(X, pd.DataFrame) else X
-        
-        if self.weight_manager is not None:
-            weights_array = self.weight_manager.get_weights_array(
-                feature_order=X.columns.tolist()
+        X_array, weights_array, feature_order = resolve_feature_weights(
+            X,
+            self.weight_manager,
+        )
+        if X_array.shape[1] != self.X_train_.shape[1]:
+            raise ValueError(
+                "X debe tener la misma cantidad de caracteristicas usada en fit()."
             )
-        else:
-            weights_array = np.ones(X_array.shape[1])
+        if self.feature_names_in_ is not None and feature_order != self.feature_names_in_:
+            raise ValueError(
+                "Las columnas de X deben conservar el mismo nombre y orden de fit()."
+            )
             
         diff = X_array[:, np.newaxis, :] - self.X_train_[np.newaxis, :, :]
         dist_matrix = np.sqrt(np.sum(weights_array * diff**2, axis=2))

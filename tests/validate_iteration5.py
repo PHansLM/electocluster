@@ -102,6 +102,9 @@ def run_quick_checks() -> None:
 
     assert WKMedoids and WeightedHierarchicalClustering and WDBSCAN
 
+    print("[quick] Checking WK-Medoids weight contract")
+    _check_wkmedoids_contract(WKMedoids)
+
     print("[quick] Checking metric key compatibility")
     legacy = {
         "silhouette_score": 0.1,
@@ -124,6 +127,66 @@ def run_quick_checks() -> None:
         for key in ("silhouette", "davies_bouldin", "calinski_harabasz"):
             assert key in metrics, f"{path.name} is missing metric key {key}."
     assert {"WKMedoids", "W-Hierarchical Clustering", "W-DBSCAN"} <= algorithms
+
+
+def _check_wkmedoids_contract(WKMedoids) -> None:
+    import numpy as np
+    import pandas as pd
+
+    class StaticWeightManager:
+        def __init__(self, weights):
+            self.weights = weights
+            self.calls = 0
+
+        def get_weights_array(self, feature_order=None):
+            self.calls += 1
+            assert feature_order == ["x", "y"]
+            return self.weights
+
+    data = pd.DataFrame(
+        {
+            "x": [0.0, 0.1, 0.2, 4.8, 4.9, 5.0],
+            "y": [0.0, 0.2, 0.1, 5.0, 4.8, 4.9],
+        }
+    )
+
+    manager = StaticWeightManager([0.4, 0.6])
+    weighted = WKMedoids(n_clusters=2, random_state=42, weight_manager=manager)
+    with contextlib.redirect_stdout(io.StringIO()):
+        weighted.fit(data)
+    assert manager.calls == 1, "WKMedoids debe resolver los pesos una vez en fit()."
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        predicted = weighted.predict(data)
+    assert manager.calls == 2, "WKMedoids debe resolver los pesos una vez en predict()."
+    assert len(predicted) == len(data)
+
+    implicit_uniform = WKMedoids(n_clusters=2, random_state=42, weight_manager=None)
+    explicit_uniform = WKMedoids(
+        n_clusters=2,
+        random_state=42,
+        weight_manager=StaticWeightManager([1.0, 1.0]),
+    )
+    with contextlib.redirect_stdout(io.StringIO()):
+        implicit_uniform.fit(data)
+        explicit_uniform.fit(data)
+    implicit_partition = implicit_uniform.labels_[:, None] == implicit_uniform.labels_[None, :]
+    explicit_partition = explicit_uniform.labels_[:, None] == explicit_uniform.labels_[None, :]
+    assert np.array_equal(implicit_partition, explicit_partition)
+
+    for invalid_weights in ([1.0], [1.0, np.nan], [1.0, -0.1], [0.0, 0.0]):
+        invalid_model = WKMedoids(
+            n_clusters=2,
+            random_state=42,
+            weight_manager=StaticWeightManager(invalid_weights),
+        )
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                invalid_model.fit(data)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"WKMedoids acepto pesos invalidos: {invalid_weights}")
 
 
 def run_full_checks() -> None:
