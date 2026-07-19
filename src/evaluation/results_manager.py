@@ -12,6 +12,8 @@ from typing import Any
 
 import numpy as np
 
+from .comparability import run_evaluation_summary
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 RESULTS_PATH = PROJECT_ROOT / "results"
 
@@ -107,6 +109,7 @@ class ResultsManager:
             with open(filepath, encoding="utf-8") as f:
                 data = json.load(f)
             metrics = data.get("metrics", {})
+            evaluation = run_evaluation_summary(data)
             runs.append({
                 "run_id": data.get("run_id"),
                 "algorithm": data.get("algorithm"),
@@ -116,6 +119,14 @@ class ResultsManager:
                 "silhouette": self._metric_value(metrics, "silhouette"),
                 "davies_bouldin": self._metric_value(metrics, "davies_bouldin"),
                 "calinski_harabasz": self._metric_value(metrics, "calinski_harabasz"),
+                "n_total": evaluation["n_total"],
+                "n_evaluated": evaluation["n_evaluated"],
+                "coverage": evaluation["coverage"],
+                "coverage_percentage": evaluation["coverage_percentage"],
+                "noise_percentage": evaluation["noise_percentage"],
+                "metric_space": evaluation["metric_space"],
+                "population": evaluation["population"],
+                "dataset_sha256": evaluation["dataset_sha256"],
             })
         return sorted(runs, key=lambda run: run.get("timestamp") or "", reverse=True)
 

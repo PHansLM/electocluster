@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 
 EVALUATION_CONTEXT_SCHEMA = "iteration5-evaluation-context-v1"
+INTERNAL_METRICS_V1 = "sklearn_internal_metrics_v1"
 
 COMMON_PROCESSED_V1 = "common_processed_v1"
 DIRECT_WEIGHTED_DISTANCE_V1 = "direct_weighted_distance_v1"
@@ -73,6 +77,7 @@ def build_evaluation_context(
     population: str,
     n_total: int,
     n_evaluated: int,
+    evaluated_indices: list | None = None,
 ) -> dict:
     """Registra donde se agrupo y donde se calcularon las metricas."""
     n_total = int(n_total)
@@ -88,6 +93,18 @@ def build_evaluation_context(
         "model_input_space": describe_feature_space(model_input_space),
         "metric_space": describe_feature_space(metric_space),
         "population": describe_evaluation_population(population),
+        "metric_definition": {
+            "id": INTERNAL_METRICS_V1,
+            "metrics": ["silhouette", "davies_bouldin", "calinski_harabasz"],
+        },
         "n_total": n_total,
         "n_evaluated": n_evaluated,
+        "evaluation_index_sha256": _sequence_sha256(evaluated_indices),
     }
+
+
+def _sequence_sha256(values: list | None) -> str | None:
+    if values is None:
+        return None
+    payload = json.dumps(values, ensure_ascii=False, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()

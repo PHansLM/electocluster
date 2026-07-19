@@ -24,6 +24,7 @@ from .feature_space import (
     WEIGHTED_PCA_V1,
     build_evaluation_context,
 )
+from .comparability import assess_run_comparability, run_evaluation_summary
 
 __all__ = [
     'ClusteringMetrics',
@@ -46,4 +47,6 @@ __all__ = [
     'WEIGHTED_FEATURES_V1',
     'WEIGHTED_PCA_V1',
     'build_evaluation_context',
+    'assess_run_comparability',
+    'run_evaluation_summary',
 ]

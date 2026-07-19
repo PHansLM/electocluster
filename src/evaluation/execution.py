@@ -189,6 +189,7 @@ def _run_wkmedoids(
             population=ALL_SAMPLES_V1,
             n_total=len(labels),
             n_evaluated=len(labels),
+            evaluated_indices=df.index.tolist(),
         ),
     }
     return _result_dict(model, clean_params, metrics, labels, metadata, df, labels)
@@ -222,6 +223,7 @@ def _run_whierarchical(
             population=ALL_SAMPLES_V1,
             n_total=len(labels),
             n_evaluated=len(labels),
+            evaluated_indices=df.index.tolist(),
         ),
     }
     return _result_dict(model, clean_params, metrics, labels, metadata, df, labels)
@@ -279,6 +281,7 @@ def _run_wdbscan(
             population=CLUSTERED_WITHOUT_NOISE_V1,
             n_total=len(labels),
             n_evaluated=int(eval_mask.sum()),
+            evaluated_indices=df.index[eval_mask].tolist(),
         ),
     }
     return _result_dict(model, clean_params, metrics, labels, metadata, eval_data, eval_labels)

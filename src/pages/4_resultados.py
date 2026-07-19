@@ -18,6 +18,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.evaluation.execution import load_processed_dataset
+from src.evaluation.comparability import assess_run_comparability, run_evaluation_summary
 from src.evaluation.provenance import sha256_file, stored_dataset_sha256
 from src.evaluation.report_generator import ReportGenerator
 from src.evaluation.results_manager import RESULTS_PATH, ResultsManager
@@ -297,13 +298,18 @@ if len(labels) != len(df):
     st.stop()
 
 st.markdown("### Detalle del run")
-col1, col2, col3, col4, col5 = st.columns(5)
+evaluation_summary = run_evaluation_summary(run)
+st.caption(f"Algoritmo: **{run.get('algorithm')}**")
+col1, col2, col3, col4, col5, col6 = st.columns(6)
 metrics = run.get("metrics", {})
-col1.metric("Algoritmo", run.get("algorithm"))
-col2.metric("Clusters", run.get("n_clusters"))
-col3.metric("Ruido", run.get("n_noise"))
-col4.metric("Silhouette", _format_metric(metrics.get("silhouette"), 4))
-col5.metric("Davies-Bouldin", _format_metric(metrics.get("davies_bouldin"), 4))
+coverage_percentage = evaluation_summary["coverage_percentage"]
+coverage_label = "N/A" if coverage_percentage is None else f"{coverage_percentage:.1f}%"
+col1.metric("Clusters", run.get("n_clusters"))
+col2.metric("Evaluadas", f"{evaluation_summary['n_evaluated']}/{evaluation_summary['n_total']}")
+col3.metric("Cobertura", coverage_label)
+col4.metric("Ruido", run.get("n_noise"))
+col5.metric("Silhouette", _format_metric(metrics.get("silhouette"), 4))
+col6.metric("Davies-Bouldin", _format_metric(metrics.get("davies_bouldin"), 4))
 
 with st.expander("Parametros, pesos y metadata", expanded=False):
     c1, c2 = st.columns(2)
@@ -548,6 +554,19 @@ with tab_compare:
     )
 
     if compare_ids:
+        selected_runs = [rm.load_run(run_id) for run_id in compare_ids]
+        comparability = assess_run_comparability(selected_runs)
+        if comparability["directly_comparable"]:
+            st.success(
+                "Comparacion directa habilitada: dataset, espacio y poblacion coinciden.",
+                icon=":material/verified:",
+            )
+        else:
+            st.warning(
+                "Ranking deshabilitado. " + " ".join(comparability["reasons"]),
+                icon=":material/compare_arrows:",
+            )
+
         comparison_df = runs_df[runs_df["run_id"].isin(compare_ids)].copy()
         comparison_df["run_label"] = comparison_df.apply(_comparison_label, axis=1)
 
@@ -568,15 +587,17 @@ with tab_compare:
 
                 ascending = spec["direction"] == "menor"
                 metric_df = metric_df.sort_values(metric_key, ascending=ascending)
-                best_row = metric_df.iloc[0]
-
-                col_best, col_note = st.columns([1, 2])
-                col_best.metric(
-                    f"Mejor {spec['label']}",
-                    _format_metric(best_row[metric_key], spec["precision"]),
-                    best_row["algorithm"],
-                )
-                col_note.caption(spec["description"])
+                if comparability["directly_comparable"]:
+                    best_row = metric_df.iloc[0]
+                    col_best, col_note = st.columns([1, 2])
+                    col_best.metric(
+                        f"Mejor {spec['label']}",
+                        _format_metric(best_row[metric_key], spec["precision"]),
+                        best_row["algorithm"],
+                    )
+                    col_note.caption(spec["description"])
+                else:
+                    st.caption(spec["description"] + " Se muestra sin declarar un ganador.")
 
                 fig_metric = px.bar(
                     metric_df,

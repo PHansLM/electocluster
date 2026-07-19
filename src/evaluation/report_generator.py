@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from .comparability import assess_run_comparability, run_evaluation_summary
 from .results_manager import ResultsManager
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -37,17 +38,20 @@ class ReportGenerator:
             raise ValueError("Se requieren al menos 2 ejecuciones para comparar.")
 
         runs = [self.rm.load_run(run_id) for run_id in run_ids]
+        comparability = assess_run_comparability(runs)
 
         report = {
             "report_name": report_name or f"comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             "generated_at": datetime.now().isoformat(),
             "runs_compared": run_ids,
             "summary": [],
+            "comparability": comparability,
             "best_by_metric": {},
         }
 
         for run in runs:
             metrics = run.get("metrics", {})
+            evaluation = run_evaluation_summary(run)
             report["summary"].append({
                 "run_id": run["run_id"],
                 "algorithm": run["algorithm"],
@@ -57,36 +61,38 @@ class ReportGenerator:
                 "silhouette": self._metric_value(metrics, "silhouette"),
                 "davies_bouldin": self._metric_value(metrics, "davies_bouldin"),
                 "calinski_harabasz": self._metric_value(metrics, "calinski_harabasz"),
+                **evaluation,
             })
 
-        valid_sil = [
-            run for run in runs
-            if self._metric_value(run.get("metrics", {}), "silhouette") is not None
-        ]
-        valid_db = [
-            run for run in runs
-            if self._metric_value(run.get("metrics", {}), "davies_bouldin") is not None
-        ]
-        valid_ch = [
-            run for run in runs
-            if self._metric_value(run.get("metrics", {}), "calinski_harabasz") is not None
-        ]
+        if comparability["directly_comparable"]:
+            valid_sil = [
+                run for run in runs
+                if self._metric_value(run.get("metrics", {}), "silhouette") is not None
+            ]
+            valid_db = [
+                run for run in runs
+                if self._metric_value(run.get("metrics", {}), "davies_bouldin") is not None
+            ]
+            valid_ch = [
+                run for run in runs
+                if self._metric_value(run.get("metrics", {}), "calinski_harabasz") is not None
+            ]
 
-        if valid_sil:
-            report["best_by_metric"]["silhouette"] = max(
-                valid_sil,
-                key=lambda run: self._metric_value(run["metrics"], "silhouette")
-            )["run_id"]
-        if valid_db:
-            report["best_by_metric"]["davies_bouldin"] = min(
-                valid_db,
-                key=lambda run: self._metric_value(run["metrics"], "davies_bouldin")
-            )["run_id"]
-        if valid_ch:
-            report["best_by_metric"]["calinski_harabasz"] = max(
-                valid_ch,
-                key=lambda run: self._metric_value(run["metrics"], "calinski_harabasz")
-            )["run_id"]
+            if valid_sil:
+                report["best_by_metric"]["silhouette"] = max(
+                    valid_sil,
+                    key=lambda run: self._metric_value(run["metrics"], "silhouette")
+                )["run_id"]
+            if valid_db:
+                report["best_by_metric"]["davies_bouldin"] = min(
+                    valid_db,
+                    key=lambda run: self._metric_value(run["metrics"], "davies_bouldin")
+                )["run_id"]
+            if valid_ch:
+                report["best_by_metric"]["calinski_harabasz"] = max(
+                    valid_ch,
+                    key=lambda run: self._metric_value(run["metrics"], "calinski_harabasz")
+                )["run_id"]
 
         comp_path = self.results_path / "comparisons" / f"{report['report_name']}.json"
         with open(comp_path, "w", encoding="utf-8") as f:
@@ -99,6 +105,7 @@ class ReportGenerator:
         """Genera resumen legible de una sola ejecucion."""
         run = self.rm.load_run(run_id)
         metrics = run["metrics"]
+        evaluation = run_evaluation_summary(run)
         lines = [
             f"EJECUCION: {run_id}",
             f"Algoritmo: {run['algorithm']}",
@@ -107,6 +114,10 @@ class ReportGenerator:
             f"Clusters identificados: {run['n_clusters']}",
             f"Puntos de ruido: {run['n_noise']}",
             f"Registros totales: {run['n_samples']}",
+            f"Registros evaluados: {evaluation['n_evaluated']}",
+            f"Cobertura: {self._format_percentage(evaluation['coverage_percentage'])}",
+            f"Espacio de metricas: {evaluation['metric_space'] or 'No registrado'}",
+            f"Poblacion: {evaluation['population'] or 'No registrada'}",
             "",
             "METRICAS:",
             f"  Silhouette Score:       {self._metric_value(metrics, 'silhouette')}",
@@ -122,28 +133,33 @@ class ReportGenerator:
             f"Generado: {report['generated_at']}",
             "=" * 70,
             "",
-            f"{'Algoritmo':<24} {'Clusters':>8} {'Ruido':>8} "
+            f"{'Algoritmo':<24} {'Clusters':>8} {'Evaluadas':>10} {'Cobertura':>10} {'Ruido':>8} "
             f"{'Silhouette':>12} {'D-Bouldin':>12} {'Calinski-H':>12}",
-            "-" * 70,
+            "-" * 104,
         ]
 
         for summary in report["summary"]:
             sil = self._format_metric(summary["silhouette"], precision=4)
             db = self._format_metric(summary["davies_bouldin"], precision=4)
             ch = self._format_metric(summary["calinski_harabasz"], precision=2)
+            coverage = self._format_percentage(summary["coverage_percentage"])
             lines.append(
                 f"{summary['algorithm']:<24} {summary['n_clusters']:>8} "
-                f"{summary['n_noise']:>8} {sil:>12} {db:>12} {ch:>12}"
+                f"{summary['n_evaluated']:>10} {coverage:>10} {summary['n_noise']:>8} "
+                f"{sil:>12} {db:>12} {ch:>12}"
             )
 
-        lines += [
-            "-" * 70,
-            "",
-            "MEJOR POR METRICA:",
-            f"  Silhouette (mayor es mejor):        {report['best_by_metric'].get('silhouette', 'N/A')}",
-            f"  Davies-Bouldin (menor es mejor):    {report['best_by_metric'].get('davies_bouldin', 'N/A')}",
-            f"  Calinski-Harabasz (mayor es mejor): {report['best_by_metric'].get('calinski_harabasz', 'N/A')}",
-        ]
+        lines += ["-" * 104, ""]
+        if report["comparability"]["directly_comparable"]:
+            lines += [
+                "MEJOR POR METRICA:",
+                f"  Silhouette (mayor es mejor):        {report['best_by_metric'].get('silhouette', 'N/A')}",
+                f"  Davies-Bouldin (menor es mejor):    {report['best_by_metric'].get('davies_bouldin', 'N/A')}",
+                f"  Calinski-Harabasz (mayor es mejor): {report['best_by_metric'].get('calinski_harabasz', 'N/A')}",
+            ]
+        else:
+            lines.append("RANKING NO DISPONIBLE:")
+            lines.extend(f"  - {reason}" for reason in report["comparability"]["reasons"])
 
         report_path = self.results_path / "reports" / f"{report['report_name']}.txt"
         with open(report_path, "w", encoding="utf-8") as f:
@@ -163,3 +179,9 @@ class ReportGenerator:
         if value is None:
             return "N/A"
         return f"{value:.{precision}f}"
+
+    @staticmethod
+    def _format_percentage(value) -> str:
+        if value is None:
+            return "N/A"
+        return f"{value:.1f}%"

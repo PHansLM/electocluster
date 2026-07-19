@@ -89,6 +89,7 @@ def run_quick_checks() -> None:
         "src.evaluation",
         "src.evaluation.execution",
         "src.evaluation.feature_space",
+        "src.evaluation.comparability",
         "src.evaluation.parameter_optimizer",
         "src.evaluation.provenance",
         "src.evaluation.results_manager",
@@ -128,6 +129,9 @@ def run_quick_checks() -> None:
 
     print("[quick] Checking historical feature-space identifiers")
     _check_feature_spaces()
+
+    print("[quick] Checking safe report comparability")
+    _check_comparability()
 
     print("[quick] Checking persisted canonical runs")
     metrics_dir = PROJECT_ROOT / "results" / "metrics"
@@ -194,11 +198,85 @@ def _check_feature_spaces() -> None:
         population=ALL_SAMPLES_V1,
         n_total=6,
         n_evaluated=6,
+        evaluated_indices=list(range(6)),
     )
     assert context["clustering_space"]["id"] == DIRECT_WEIGHTED_DISTANCE_V1
     assert context["metric_space"]["id"] == COMMON_PROCESSED_V1
     assert context["population"]["id"] == ALL_SAMPLES_V1
     assert context["n_evaluated"] == context["n_total"] == 6
+    assert context["evaluation_index_sha256"]
+
+
+def _check_comparability() -> None:
+    from src.evaluation.comparability import assess_run_comparability
+    from src.evaluation.feature_space import (
+        ALL_SAMPLES_V1,
+        COMMON_PROCESSED_V1,
+        DIRECT_WEIGHTED_DISTANCE_V1,
+        PRECOMPUTED_DISTANCE_V1,
+        WEIGHTED_PCA_V1,
+        build_evaluation_context,
+    )
+    from src.evaluation.report_generator import ReportGenerator
+    from src.evaluation.results_manager import ResultsManager
+
+    def metadata(metric_space: str) -> dict:
+        return {
+            "provenance": {"dataset": {"sha256": "a" * 64}},
+            "evaluation_context": build_evaluation_context(
+                clustering_space=DIRECT_WEIGHTED_DISTANCE_V1,
+                model_input_space=PRECOMPUTED_DISTANCE_V1,
+                metric_space=metric_space,
+                population=ALL_SAMPLES_V1,
+                n_total=6,
+                n_evaluated=6,
+                evaluated_indices=list(range(6)),
+            ),
+        }
+
+    base_run = {"run_id": "run_a", "n_samples": 6, "n_noise": 0, "metadata": metadata(COMMON_PROCESSED_V1)}
+    comparable_run = {"run_id": "run_b", "n_samples": 6, "n_noise": 0, "metadata": metadata(COMMON_PROCESSED_V1)}
+    incompatible_run = {"run_id": "run_c", "n_samples": 6, "n_noise": 0, "metadata": metadata(WEIGHTED_PCA_V1)}
+    assert assess_run_comparability([base_run])["status"] == "insufficient"
+    assert assess_run_comparability([base_run, comparable_run])["directly_comparable"]
+    assert not assess_run_comparability([base_run, incompatible_run])["directly_comparable"]
+    assert assess_run_comparability([base_run, {"run_id": "legacy"}])["status"] == "unverifiable"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manager = ResultsManager(results_path=tmpdir)
+        common_args = {
+            "params": {"n_clusters": 2},
+            "weights": {"x": 1.0},
+            "labels": [0, 0, 0, 1, 1, 1],
+        }
+        manager.save_run(
+            algorithm="Algorithm A",
+            metrics={"silhouette": 0.2, "davies_bouldin": 1.5, "calinski_harabasz": 10.0},
+            metadata=metadata(COMMON_PROCESSED_V1),
+            run_id="run_a",
+            **common_args,
+        )
+        manager.save_run(
+            algorithm="Algorithm B",
+            metrics={"silhouette": 0.3, "davies_bouldin": 1.2, "calinski_harabasz": 12.0},
+            metadata=metadata(COMMON_PROCESSED_V1),
+            run_id="run_b",
+            **common_args,
+        )
+        manager.save_run(
+            algorithm="Algorithm C",
+            metrics={"silhouette": 0.4, "davies_bouldin": 1.0, "calinski_harabasz": 14.0},
+            metadata=metadata(WEIGHTED_PCA_V1),
+            run_id="run_c",
+            **common_args,
+        )
+        generator = ReportGenerator(manager)
+        valid_report = generator.compare_runs(["run_a", "run_b"], "valid")
+        assert valid_report["comparability"]["directly_comparable"]
+        assert valid_report["best_by_metric"]["silhouette"] == "run_b"
+        invalid_report = generator.compare_runs(["run_a", "run_c"], "invalid")
+        assert not invalid_report["comparability"]["directly_comparable"]
+        assert invalid_report["best_by_metric"] == {}
 
 
 def _check_wkmedoids_contract(WKMedoids) -> None:
