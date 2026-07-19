@@ -11,6 +11,7 @@ from typing import Optional
 from src.weighting.weight_manager import WeightManager
 
 from ..base import BaseClusterer 
+from ._weights import resolve_feature_weights
 
 
 class WDBSCAN(BaseClusterer):
@@ -74,8 +75,8 @@ class WDBSCAN(BaseClusterer):
         self._model = SKLearnDBSCAN(
             eps=eps,
             min_samples=min_samples,
-            metric=metric,
-            algorithm=algorithm,
+            metric='precomputed',
+            algorithm='brute',
             leaf_size=leaf_size,
             n_jobs=n_jobs
         )
@@ -83,7 +84,7 @@ class WDBSCAN(BaseClusterer):
         self.core_sample_indices_ = None
         self.n_noise_points_ = None
         
-    def fit(self, X: pd.DataFrame) -> 'DBSCAN':
+    def fit(self, X: pd.DataFrame) -> 'WDBSCAN':
         """
         Entrena W-DBSCAN sobre los datos
         
@@ -95,12 +96,14 @@ class WDBSCAN(BaseClusterer):
         """
         print(f"Entrenando DBSCAN (eps={self.eps}, min_samples={self.min_samples})...")
         
-        X_array = X.values if isinstance(X, pd.DataFrame) else X
-
-        weights_array = self.weight_manager.get_weights_array(feature_order=X.columns.tolist())
+        X_array, weights_array, _ = resolve_feature_weights(
+            X,
+            self.weight_manager,
+        )
 
         diff = X_array[:, np.newaxis, :] - X_array[np.newaxis, :, :]
         dist_matrix = np.sqrt(np.sum(weights_array * diff**2, axis=2))
+        self._validate_precomputed_distances(dist_matrix)
 
         #self._model = SKLearnDBSCAN(eps=self.eps, min_samples=self.min_samples,
         #                            metric='precomputed', algorithm='brute')
@@ -125,6 +128,20 @@ class WDBSCAN(BaseClusterer):
         print(f"  Puntos core: {len(self.core_sample_indices_)}")
         
         return self
+
+    @staticmethod
+    def _validate_precomputed_distances(dist_matrix: np.ndarray) -> None:
+        """Valida el contrato requerido por DBSCAN con metric precomputed."""
+        if dist_matrix.ndim != 2 or dist_matrix.shape[0] != dist_matrix.shape[1]:
+            raise ValueError("La matriz de distancias debe ser cuadrada.")
+        if not np.all(np.isfinite(dist_matrix)):
+            raise ValueError("La matriz de distancias debe contener valores finitos.")
+        if np.any(dist_matrix < 0):
+            raise ValueError("La matriz de distancias no puede contener valores negativos.")
+        if not np.allclose(dist_matrix, dist_matrix.T):
+            raise ValueError("La matriz de distancias debe ser simetrica.")
+        if not np.allclose(np.diag(dist_matrix), 0.0):
+            raise ValueError("La diagonal de la matriz de distancias debe ser cero.")
 
     # DBSCAN no tiene un predict perse, opera sobre el mismo dataset de entrenamiento
     def predict(self, X: pd.DataFrame) -> np.ndarray:

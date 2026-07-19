@@ -108,6 +108,9 @@ def run_quick_checks() -> None:
     print("[quick] Checking weighted hierarchical linkage contract")
     _check_weighted_hierarchical_contract(WeightedHierarchicalClustering)
 
+    print("[quick] Checking W-DBSCAN precomputed distance contract")
+    _check_wdbscan_contract(WDBSCAN)
+
     print("[quick] Checking metric key compatibility")
     legacy = {
         "silhouette_score": 0.1,
@@ -254,6 +257,85 @@ def _check_weighted_hierarchical_contract(WeightedHierarchicalClustering) -> Non
         pass
     else:
         raise AssertionError("WeightedHierarchicalClustering acepto pesos invalidos.")
+
+
+def _check_wdbscan_contract(WDBSCAN) -> None:
+    import numpy as np
+    import pandas as pd
+
+    class StaticWeightManager:
+        def __init__(self, weights):
+            self.weights = weights
+            self.calls = 0
+
+        def get_weights_array(self, feature_order=None):
+            self.calls += 1
+            assert feature_order == ["x", "y"]
+            return self.weights
+
+    data = pd.DataFrame(
+        {
+            "x": [0.0, 0.1, 0.2, 4.8, 4.9, 5.0],
+            "y": [0.0, 0.2, 0.1, 5.0, 4.8, 4.9],
+        }
+    )
+
+    manager = StaticWeightManager([0.4, 0.6])
+    model = WDBSCAN(
+        eps=0.5,
+        min_samples=2,
+        metric="euclidean",
+        algorithm="auto",
+        weight_manager=manager,
+    )
+    assert model.metric == "precomputed"
+    assert model.algorithm == "brute"
+    assert model._model.metric == "precomputed"
+    assert model._model.algorithm == "brute"
+    assert model.get_params()["metric"] == "precomputed"
+    assert model.get_params()["algorithm"] == "brute"
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        model.fit(data)
+    assert manager.calls == 1
+    assert model.n_clusters_ == 2
+    assert model.n_noise_points_ == 0
+
+    implicit_uniform = WDBSCAN(eps=0.5, min_samples=2, weight_manager=None)
+    explicit_uniform = WDBSCAN(
+        eps=0.5,
+        min_samples=2,
+        weight_manager=StaticWeightManager([1.0, 1.0]),
+    )
+    with contextlib.redirect_stdout(io.StringIO()):
+        implicit_uniform.fit(data)
+        explicit_uniform.fit(data)
+    implicit_partition = implicit_uniform.labels_[:, None] == implicit_uniform.labels_[None, :]
+    explicit_partition = explicit_uniform.labels_[:, None] == explicit_uniform.labels_[None, :]
+    assert np.array_equal(implicit_partition, explicit_partition)
+
+    invalid = WDBSCAN(
+        eps=0.5,
+        min_samples=2,
+        weight_manager=StaticWeightManager([1.0]),
+    )
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            invalid.fit(data)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("WDBSCAN acepto pesos invalidos.")
+
+    invalid_data = data.copy()
+    invalid_data.loc[0, "x"] = np.nan
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            WDBSCAN(eps=0.5, min_samples=2).fit(invalid_data)
+    except ValueError as exc:
+        assert "finitos" in str(exc)
+    else:
+        raise AssertionError("WDBSCAN acepto una matriz de distancias no finita.")
 
 
 def run_full_checks() -> None:
