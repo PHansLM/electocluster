@@ -21,12 +21,16 @@ from src.evaluation.report_generator import ReportGenerator
 from src.evaluation.results_manager import RESULTS_PATH, ResultsManager
 from src.visualization import (
     PROFILE_METADATA_COLUMNS,
+    cluster_dimension_scores,
     cluster_distribution,
+    cluster_profile_deviation,
+    cluster_profile_distance_matrix,
     cluster_profiles,
     feature_display_name,
     interpret_feature_value,
     pca_projection,
     save_run_figures,
+    top_distinctive_features,
 )
 
 
@@ -199,6 +203,49 @@ def _render_profiles_table(profiles: pd.DataFrame):
     st.markdown(html, unsafe_allow_html=True)
 
 
+def _top_features_display(top_features: pd.DataFrame) -> pd.DataFrame:
+    if top_features.empty:
+        return top_features
+    display = top_features[
+        [
+            "cluster",
+            "rank",
+            "feature_name",
+            "cluster_interpretation",
+            "global_interpretation",
+            "deviation",
+        ]
+    ].copy()
+    display = display.rename(columns={
+        "cluster": "cluster",
+        "rank": "orden",
+        "feature_name": "variable",
+        "cluster_interpretation": "perfil del cluster",
+        "global_interpretation": "promedio global",
+        "deviation": "diferencia",
+    })
+    display["diferencia"] = display["diferencia"].round(4)
+    return display
+
+
+def _dimension_scores_display(dimension_scores: pd.DataFrame) -> pd.DataFrame:
+    if dimension_scores.empty:
+        return dimension_scores
+    display = dimension_scores[
+        ["cluster", "dimension", "cluster_value", "global_value", "deviation", "features"]
+    ].copy()
+    display = display.rename(columns={
+        "dimension": "dimension",
+        "cluster_value": "valor cluster",
+        "global_value": "valor global",
+        "deviation": "diferencia",
+        "features": "variables",
+    })
+    for column in ["valor cluster", "valor global", "diferencia"]:
+        display[column] = display[column].round(4)
+    return display
+
+
 st.markdown("### Ejecuciones guardadas")
 st.dataframe(
     runs_df.sort_values("timestamp", ascending=False),
@@ -251,9 +298,21 @@ with st.expander("Parametros, pesos y metadata", expanded=False):
 distribution = cluster_distribution(labels)
 profiles = cluster_profiles(df, labels)
 projection = pca_projection(df, labels)
+profile_deviations = cluster_profile_deviation(df, labels)
+top_features = top_distinctive_features(df, labels, top_n=5)
+profile_distances = cluster_profile_distance_matrix(df, labels)
+dimension_scores = cluster_dimension_scores(df, labels)
 
-tab_dist, tab_projection, tab_profiles, tab_compare = st.tabs(
-    ["Distribucion", "PCA 2D", "Perfiles", "Comparacion"]
+tab_dist, tab_profiles, tab_deviation, tab_distances, tab_dimensions, tab_projection, tab_compare = st.tabs(
+    [
+        "Distribucion",
+        "Perfiles",
+        "Diferencias",
+        "Distancias",
+        "Dimensiones",
+        "PCA 2D",
+        "Comparacion",
+    ]
 )
 
 with tab_dist:
@@ -270,6 +329,11 @@ with tab_dist:
     st.dataframe(distribution, use_container_width=True, hide_index=True)
 
 with tab_projection:
+    st.markdown("#### Proyeccion de apoyo")
+    st.caption(
+        "Proyeccion de apoyo. En 28 variables, la interpretacion principal debe "
+        "venir de perfiles, diferencias y distancias entre perfiles."
+    )
     fig_projection = px.scatter(
         projection,
         x="PC1",
@@ -306,6 +370,147 @@ with tab_profiles:
         )
         st.success("Figuras guardadas en results/figures.")
         st.json(paths)
+
+with tab_deviation:
+    st.caption(
+        "Mide cuanto se aleja cada cluster del promedio global en la escala procesada. "
+        "Para variables nominales, interpreta el color junto con la tabla de perfiles."
+    )
+    if profile_deviations.empty:
+        st.warning("No hay diferencias de perfil disponibles para este run.")
+    else:
+        feature_scores = (
+            profile_deviations.groupby("feature_name")["abs_deviation"]
+            .max()
+            .sort_values(ascending=False)
+        )
+        max_features = len(feature_scores)
+        default_features = min(12, max_features)
+        n_features = st.slider(
+            "Variables a mostrar en el heatmap",
+            min_value=1,
+            max_value=max_features,
+            value=default_features,
+        )
+        selected_features = feature_scores.head(n_features).index.tolist()
+        heatmap_data = profile_deviations[
+            profile_deviations["feature_name"].isin(selected_features)
+        ].pivot_table(
+            index="feature_name",
+            columns="cluster",
+            values="deviation",
+            aggfunc="mean",
+        )
+        st.markdown("#### Diferencia del perfil respecto al promedio global")
+        fig_deviation = px.imshow(
+            heatmap_data,
+            color_continuous_scale="RdBu_r",
+            color_continuous_midpoint=0,
+            aspect="auto",
+            labels={
+                "x": "Cluster",
+                "y": "Variable",
+                "color": "Diferencia",
+            },
+            title="Diferencia del perfil respecto al promedio global",
+        )
+        st.plotly_chart(fig_deviation, use_container_width=True)
+
+        st.markdown("#### Variables mas distintivas por cluster")
+        st.dataframe(
+            _top_features_display(top_features),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+with tab_distances:
+    st.caption(
+        "Compara perfiles promedio entre clusters. Valores menores indican perfiles "
+        "demograficos mas parecidos."
+    )
+    if profile_distances.empty:
+        st.warning("No hay distancias entre perfiles disponibles para este run.")
+    else:
+        st.markdown("#### Distancia euclidiana entre perfiles de clusters")
+        fig_distances = px.imshow(
+            profile_distances,
+            color_continuous_scale="Blues",
+            aspect="auto",
+            labels={
+                "x": "Cluster",
+                "y": "Cluster",
+                "color": "Distancia",
+            },
+            title="Distancia euclidiana entre perfiles de clusters",
+        )
+        st.plotly_chart(fig_distances, use_container_width=True)
+        st.dataframe(profile_distances.round(4), use_container_width=True)
+
+with tab_dimensions:
+    st.caption(
+        "Agrupa variables en dimensiones conceptuales para lectura global. Es una "
+        "vista explicativa, no una metrica de validacion."
+    )
+    if dimension_scores.empty:
+        st.warning("No hay dimensiones agregadas disponibles para este run.")
+    else:
+        cluster_options = sorted(
+            dimension_scores["cluster"].unique().tolist(),
+            key=lambda value: int(value),
+        )
+        selected_clusters = st.multiselect(
+            "Clusters a mostrar en radar",
+            options=cluster_options,
+            default=cluster_options[: min(4, len(cluster_options))],
+        )
+        if selected_clusters:
+            radar_data = dimension_scores[
+                dimension_scores["cluster"].isin(selected_clusters)
+            ]
+            st.markdown("#### Radar de dimensiones agregadas")
+            fig_radar = px.line_polar(
+                radar_data,
+                r="cluster_value",
+                theta="dimension",
+                color="cluster",
+                line_close=True,
+                range_r=[0, 1],
+                labels={
+                    "cluster_value": "Valor agregado",
+                    "dimension": "Dimension",
+                    "cluster": "Cluster",
+                },
+                title="Radar de dimensiones agregadas",
+            )
+            st.plotly_chart(fig_radar, use_container_width=True)
+        else:
+            st.warning("Selecciona al menos un cluster para el radar.", icon=":material/warning:")
+
+        dimension_heatmap = dimension_scores.pivot_table(
+            index="dimension",
+            columns="cluster",
+            values="deviation",
+            aggfunc="mean",
+        )
+        st.markdown("#### Diferencia de dimensiones frente al promedio global")
+        fig_dimensions = px.imshow(
+            dimension_heatmap,
+            color_continuous_scale="RdBu_r",
+            color_continuous_midpoint=0,
+            aspect="auto",
+            labels={
+                "x": "Cluster",
+                "y": "Dimension",
+                "color": "Diferencia",
+            },
+            title="Diferencia de dimensiones frente al promedio global",
+        )
+        st.plotly_chart(fig_dimensions, use_container_width=True)
+        st.dataframe(
+            _dimension_scores_display(dimension_scores),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 with tab_compare:
     compare_ids = st.multiselect(
