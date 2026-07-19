@@ -17,6 +17,15 @@ import pandas as pd
 from sklearn.decomposition import PCA
 
 from src.clustering.weighted import WKMedoids, WDBSCAN, WeightedHierarchicalClustering
+from src.evaluation.feature_space import (
+    ALL_SAMPLES_V1,
+    CLUSTERED_WITHOUT_NOISE_V1,
+    COMMON_PROCESSED_V1,
+    DIRECT_WEIGHTED_DISTANCE_V1,
+    PRECOMPUTED_DISTANCE_V1,
+    WEIGHTED_PCA_V1,
+    build_evaluation_context,
+)
 from src.evaluation.metrics import calculate_metrics
 from src.evaluation.provenance import build_run_provenance
 from src.evaluation.results_manager import ResultsManager
@@ -173,6 +182,14 @@ def _run_wkmedoids(
         "excluded_noise": False,
         "n_evaluated": int(len(labels)),
         "inertia": float(model.inertia_) if model.inertia_ is not None else None,
+        "evaluation_context": build_evaluation_context(
+            clustering_space=DIRECT_WEIGHTED_DISTANCE_V1,
+            model_input_space=PRECOMPUTED_DISTANCE_V1,
+            metric_space=COMMON_PROCESSED_V1,
+            population=ALL_SAMPLES_V1,
+            n_total=len(labels),
+            n_evaluated=len(labels),
+        ),
     }
     return _result_dict(model, clean_params, metrics, labels, metadata, df, labels)
 
@@ -198,6 +215,14 @@ def _run_whierarchical(
         "evaluation_space": "processed_dataset",
         "excluded_noise": False,
         "n_evaluated": int(len(labels)),
+        "evaluation_context": build_evaluation_context(
+            clustering_space=DIRECT_WEIGHTED_DISTANCE_V1,
+            model_input_space=PRECOMPUTED_DISTANCE_V1,
+            metric_space=COMMON_PROCESSED_V1,
+            population=ALL_SAMPLES_V1,
+            n_total=len(labels),
+            n_evaluated=len(labels),
+        ),
     }
     return _result_dict(model, clean_params, metrics, labels, metadata, df, labels)
 
@@ -247,6 +272,14 @@ def _run_wdbscan(
         "pca_explained_variance": float(pca.explained_variance_ratio_.sum()),
         "n_noise": int((labels == -1).sum()),
         "noise_percentage": float((labels == -1).sum() / len(labels) * 100),
+        "evaluation_context": build_evaluation_context(
+            clustering_space=WEIGHTED_PCA_V1,
+            model_input_space=PRECOMPUTED_DISTANCE_V1,
+            metric_space=WEIGHTED_PCA_V1,
+            population=CLUSTERED_WITHOUT_NOISE_V1,
+            n_total=len(labels),
+            n_evaluated=int(eval_mask.sum()),
+        ),
     }
     return _result_dict(model, clean_params, metrics, labels, metadata, eval_data, eval_labels)
 

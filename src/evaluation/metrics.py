@@ -363,9 +363,12 @@ def calculate_metrics_weighted(
     metric: str = 'euclidean'
 ) -> Dict[str, float]:
     """
-    Helper para calcular métricas en el espacio ponderado.
+    Helper historico para calcular metricas en ``weighted_features_v1``.
     Útil para mostrar como es que el algoritmo ponderado percibe los elementos del dataset y la distancia entre ellos, justificado las agrupaciones
     No aplicable a todos los algoritmos ni comparaciones
+
+    Conserva la transformacion X * weights usada por las iteraciones previas.
+    No equivale a sustituir las variables por X * sqrt(weights).
     """
     weights = weight_manager.get_weights_array(feature_order=X.columns.tolist())
     X_weighted = X * weights

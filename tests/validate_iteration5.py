@@ -88,6 +88,7 @@ def run_quick_checks() -> None:
         "src.clustering.weighted",
         "src.evaluation",
         "src.evaluation.execution",
+        "src.evaluation.feature_space",
         "src.evaluation.parameter_optimizer",
         "src.evaluation.provenance",
         "src.evaluation.results_manager",
@@ -124,6 +125,9 @@ def run_quick_checks() -> None:
 
     print("[quick] Checking iteration 5 provenance")
     _check_provenance()
+
+    print("[quick] Checking historical feature-space identifiers")
+    _check_feature_spaces()
 
     print("[quick] Checking persisted canonical runs")
     metrics_dir = PROJECT_ROOT / "results" / "metrics"
@@ -172,6 +176,29 @@ def _check_provenance() -> None:
         assert len(provenance["configuration"]["execution_sha256"]) == 64
         assert stored_dataset_sha256({"metadata": {"provenance": provenance}}) == expected_hash
         assert stored_dataset_sha256({"metadata": {}}) is None
+
+
+def _check_feature_spaces() -> None:
+    from src.evaluation.feature_space import (
+        ALL_SAMPLES_V1,
+        COMMON_PROCESSED_V1,
+        DIRECT_WEIGHTED_DISTANCE_V1,
+        PRECOMPUTED_DISTANCE_V1,
+        build_evaluation_context,
+    )
+
+    context = build_evaluation_context(
+        clustering_space=DIRECT_WEIGHTED_DISTANCE_V1,
+        model_input_space=PRECOMPUTED_DISTANCE_V1,
+        metric_space=COMMON_PROCESSED_V1,
+        population=ALL_SAMPLES_V1,
+        n_total=6,
+        n_evaluated=6,
+    )
+    assert context["clustering_space"]["id"] == DIRECT_WEIGHTED_DISTANCE_V1
+    assert context["metric_space"]["id"] == COMMON_PROCESSED_V1
+    assert context["population"]["id"] == ALL_SAMPLES_V1
+    assert context["n_evaluated"] == context["n_total"] == 6
 
 
 def _check_wkmedoids_contract(WKMedoids) -> None:
@@ -440,6 +467,16 @@ def run_sample_checks(sample_size: int) -> None:
         sample_path = Path(tmpdir) / "processed_sample.csv"
         df.to_csv(sample_path, index=False)
 
+        expected_metric_spaces = {
+            "WKMedoids": "common_processed_v1",
+            "W-Hierarchical Clustering": "common_processed_v1",
+            "W-DBSCAN": "weighted_pca_v1",
+        }
+        expected_populations = {
+            "WKMedoids": "all_samples_v1",
+            "W-Hierarchical Clustering": "all_samples_v1",
+            "W-DBSCAN": "clustered_samples_without_noise_v1",
+        }
         for algorithm in EXPECTED_CANONICAL:
             print(f"[sample] Running {algorithm}")
             with contextlib.redirect_stdout(io.StringIO()):
@@ -456,6 +493,9 @@ def run_sample_checks(sample_size: int) -> None:
             assert provenance.get("dataset", {}).get("rows") == sample_size
             assert provenance.get("dataset", {}).get("feature_order") == df.columns.tolist()
             assert provenance.get("configuration", {}).get("execution_sha256")
+            evaluation_context = result.metadata.get("evaluation_context", {})
+            assert evaluation_context.get("metric_space", {}).get("id") == expected_metric_spaces[algorithm]
+            assert evaluation_context.get("population", {}).get("id") == expected_populations[algorithm]
             del result
             gc.collect()
 
