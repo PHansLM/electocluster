@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from src.weighting.weight_manager import WeightManager
 
 from ..base import BaseClusterer 
+from ._weights import resolve_feature_weights
 
 
 class WeightedHierarchicalClustering(BaseClusterer):
@@ -49,6 +50,17 @@ class WeightedHierarchicalClustering(BaseClusterer):
             'metric': Métrica de distancia ('precomputed')
             'weight_manager': Modulo para ponderacion 
         """
+        valid_linkages = {'complete', 'average', 'single'}
+        if linkage not in valid_linkages:
+            raise ValueError(
+                f"linkage debe ser uno de {sorted(valid_linkages)}. Recibido: {linkage}"
+            )
+        if metric != 'precomputed':
+            raise ValueError(
+                "WeightedHierarchicalClustering requiere metric='precomputed' "
+                "para usar la distancia ponderada documentada."
+            )
+
         params = {
             'n_clusters': n_clusters,
             'linkage': linkage,
@@ -66,7 +78,7 @@ class WeightedHierarchicalClustering(BaseClusterer):
         self._model = AgglomerativeClustering(
             n_clusters=n_clusters,
             linkage=linkage,
-            metric=metric
+            metric='precomputed'
         )
         
         self.linkage_matrix_ = None
@@ -83,9 +95,10 @@ class WeightedHierarchicalClustering(BaseClusterer):
         """
         print(f"Entrenando Clustering Jerárquico Ponderado ({self.linkage})...")
         
-        X_array = X.values if isinstance(X, pd.DataFrame) else X
-        
-        weights_array = self.weight_manager.get_weights_array(feature_order=X.columns.tolist())
+        X_array, weights_array, _ = resolve_feature_weights(
+            X,
+            self.weight_manager,
+        )
 
         # Matriz de distancias ponderada NxN
         diff = X_array[:, np.newaxis, :] - X_array[np.newaxis, :, :]
@@ -100,7 +113,7 @@ class WeightedHierarchicalClustering(BaseClusterer):
 
         # Dendrograma también usa la matriz
         condensed = squareform(dist_matrix)
-        self.linkage_matrix_ = linkage(condensed, method='average')
+        self.linkage_matrix_ = linkage(condensed, method=self.linkage)
 
         self.fitted_ = True
         

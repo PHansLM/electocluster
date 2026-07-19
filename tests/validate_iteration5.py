@@ -105,6 +105,9 @@ def run_quick_checks() -> None:
     print("[quick] Checking WK-Medoids weight contract")
     _check_wkmedoids_contract(WKMedoids)
 
+    print("[quick] Checking weighted hierarchical linkage contract")
+    _check_weighted_hierarchical_contract(WeightedHierarchicalClustering)
+
     print("[quick] Checking metric key compatibility")
     legacy = {
         "silhouette_score": 0.1,
@@ -187,6 +190,70 @@ def _check_wkmedoids_contract(WKMedoids) -> None:
             pass
         else:
             raise AssertionError(f"WKMedoids acepto pesos invalidos: {invalid_weights}")
+
+
+def _check_weighted_hierarchical_contract(WeightedHierarchicalClustering) -> None:
+    import numpy as np
+    import pandas as pd
+    from scipy.cluster.hierarchy import fcluster, linkage as scipy_linkage
+    from scipy.spatial.distance import pdist
+
+    class StaticWeightManager:
+        def __init__(self, weights):
+            self.weights = weights
+            self.calls = 0
+
+        def get_weights_array(self, feature_order=None):
+            self.calls += 1
+            assert feature_order == ["x", "y"]
+            return self.weights
+
+    data = pd.DataFrame(
+        {
+            "x": [0.0, 0.1, 0.2, 4.8, 4.9, 5.0],
+            "y": [0.0, 0.2, 0.1, 5.0, 4.8, 4.9],
+        }
+    )
+
+    for linkage_method in ("complete", "average", "single"):
+        model = WeightedHierarchicalClustering(
+            n_clusters=2,
+            linkage=linkage_method,
+            weight_manager=None,
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            model.fit(data)
+
+        expected_linkage = scipy_linkage(pdist(data.to_numpy()), method=linkage_method)
+        assert np.allclose(model.linkage_matrix_, expected_linkage)
+
+        scipy_labels = fcluster(model.linkage_matrix_, t=2, criterion="maxclust")
+        model_partition = model.labels_[:, None] == model.labels_[None, :]
+        scipy_partition = scipy_labels[:, None] == scipy_labels[None, :]
+        assert np.array_equal(model_partition, scipy_partition)
+
+    manager = StaticWeightManager([0.4, 0.6])
+    weighted = WeightedHierarchicalClustering(
+        n_clusters=2,
+        linkage="complete",
+        weight_manager=manager,
+    )
+    with contextlib.redirect_stdout(io.StringIO()):
+        weighted.fit(data)
+    assert manager.calls == 1
+
+    invalid = WeightedHierarchicalClustering(
+        n_clusters=2,
+        linkage="complete",
+        weight_manager=StaticWeightManager([1.0]),
+    )
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            invalid.fit(data)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("WeightedHierarchicalClustering acepto pesos invalidos.")
 
 
 def run_full_checks() -> None:
