@@ -137,7 +137,7 @@ def optimize_whierarchical_params(
         criterion="Mayor Silhouette; Davies-Bouldin como apoyo",
         notes=[
             "Busqueda calculada sobre muestra para controlar memoria.",
-            "El dendrograma historico del modulo sigue usando enlace promedio para visualizacion.",
+            "Las etiquetas y el dendrograma usan el mismo enlace seleccionado.",
         ],
     )
 
