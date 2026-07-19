@@ -89,6 +89,7 @@ def run_quick_checks() -> None:
         "src.evaluation",
         "src.evaluation.execution",
         "src.evaluation.parameter_optimizer",
+        "src.evaluation.provenance",
         "src.evaluation.results_manager",
         "src.evaluation.report_generator",
         "src.visualization.clustering_plots",
@@ -121,6 +122,9 @@ def run_quick_checks() -> None:
     assert normalized["silhouette"] == normalized["silhouette_score"] == 0.1
     assert ReportGenerator._metric_value(legacy, "davies_bouldin") == 2.0
 
+    print("[quick] Checking iteration 5 provenance")
+    _check_provenance()
+
     print("[quick] Checking persisted canonical runs")
     metrics_dir = PROJECT_ROOT / "results" / "metrics"
     paths = sorted(metrics_dir.glob("*.json"))
@@ -133,6 +137,41 @@ def run_quick_checks() -> None:
         for key in ("silhouette", "davies_bouldin", "calinski_harabasz"):
             assert key in metrics, f"{path.name} is missing metric key {key}."
     assert {"WKMedoids", "W-Hierarchical Clustering", "W-DBSCAN"} <= algorithms
+
+
+def _check_provenance() -> None:
+    import hashlib
+    import pandas as pd
+
+    from src.evaluation.provenance import (
+        PROVENANCE_SCHEMA,
+        build_run_provenance,
+        sha256_file,
+        stored_dataset_sha256,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset_path = Path(tmpdir) / "processed.csv"
+        dataset_path.write_text("x,y\n1,2\n3,4\n", encoding="utf-8")
+        df = pd.read_csv(dataset_path)
+        provenance = build_run_provenance(
+            dataset_path=dataset_path,
+            df=df,
+            algorithm="WKMedoids",
+            params={"random_state": 42, "n_clusters": 2},
+            weights={"x": 0.4, "y": 0.6},
+        )
+
+        expected_hash = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+        assert sha256_file(dataset_path) == expected_hash
+        assert provenance["schema"] == PROVENANCE_SCHEMA
+        assert provenance["dataset"]["sha256"] == expected_hash
+        assert provenance["dataset"]["rows"] == 2
+        assert provenance["dataset"]["columns"] == 2
+        assert provenance["dataset"]["feature_order"] == ["x", "y"]
+        assert len(provenance["configuration"]["execution_sha256"]) == 64
+        assert stored_dataset_sha256({"metadata": {"provenance": provenance}}) == expected_hash
+        assert stored_dataset_sha256({"metadata": {}}) is None
 
 
 def _check_wkmedoids_contract(WKMedoids) -> None:
@@ -413,6 +452,10 @@ def run_sample_checks(sample_size: int) -> None:
             assert result.run_id is None, f"{algorithm} unexpectedly persisted a run."
             assert len(result.labels) == sample_size, f"{algorithm} returned wrong label count."
             assert result.model is not None, f"{algorithm} did not return a model."
+            provenance = result.metadata.get("provenance", {})
+            assert provenance.get("dataset", {}).get("rows") == sample_size
+            assert provenance.get("dataset", {}).get("feature_order") == df.columns.tolist()
+            assert provenance.get("configuration", {}).get("execution_sha256")
             del result
             gc.collect()
 

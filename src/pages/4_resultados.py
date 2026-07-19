@@ -5,6 +5,7 @@ Lista ejecuciones persistidas, muestra metricas, perfiles y visualizaciones, y
 genera reportes comparativos para el Capitulo 8.
 """
 
+import json
 import sys
 from html import escape
 from pathlib import Path
@@ -17,8 +18,10 @@ import plotly.express as px
 import streamlit as st
 
 from src.evaluation.execution import load_processed_dataset
+from src.evaluation.provenance import sha256_file, stored_dataset_sha256
 from src.evaluation.report_generator import ReportGenerator
 from src.evaluation.results_manager import RESULTS_PATH, ResultsManager
+from src.utils.constants import PROCESSED_DATA_PATH
 from src.visualization import (
     PROFILE_METADATA_COLUMNS,
     cluster_dimension_scores,
@@ -267,6 +270,24 @@ selected_run_id = st.selectbox(
 run = rm.load_run(selected_run_id)
 labels = rm.load_assignments(selected_run_id)
 df = load_processed_dataset()
+stored_dataset_hash = stored_dataset_sha256(run)
+current_dataset_hash = sha256_file(PROCESSED_DATA_PATH)
+
+if stored_dataset_hash is None:
+    st.warning(
+        "Ejecucion historica sin hash de dataset. La coincidencia solo puede "
+        "comprobarse por cantidad de registros.",
+        icon=":material/history:",
+    )
+elif stored_dataset_hash != current_dataset_hash:
+    st.error(
+        "El dataset procesado actual no coincide con el que produjo esta ejecucion. "
+        "Carga el dataset correcto o selecciona otro run.",
+        icon=":material/fingerprint_off:",
+    )
+    st.stop()
+else:
+    st.caption(f"Dataset verificado por SHA-256: `{current_dataset_hash[:12]}...`")
 
 if len(labels) != len(df):
     st.error(
@@ -294,6 +315,12 @@ with st.expander("Parametros, pesos y metadata", expanded=False):
     with c2:
         st.markdown("**Snapshot de pesos**")
         st.json(run.get("weights_snapshot", {}))
+        st.download_button(
+            "Descargar registro JSON",
+            data=json.dumps(run, indent=2, ensure_ascii=False).encode("utf-8"),
+            file_name=f"{selected_run_id}.json",
+            mime="application/json",
+        )
 
 distribution = cluster_distribution(labels)
 profiles = cluster_profiles(df, labels)

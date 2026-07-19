@@ -13,6 +13,7 @@ from .parameter_optimizer import (
 )
 from .results_manager import ResultsManager
 from .report_generator import ReportGenerator
+from .provenance import build_run_provenance, sha256_file, stored_dataset_sha256
 
 __all__ = [
     'ClusteringMetrics',
@@ -24,4 +25,7 @@ __all__ = [
     'optimize_wkmedoids_params',
     'ResultsManager',
     'ReportGenerator',
+    'build_run_provenance',
+    'sha256_file',
+    'stored_dataset_sha256',
 ]

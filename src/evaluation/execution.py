@@ -18,6 +18,7 @@ from sklearn.decomposition import PCA
 
 from src.clustering.weighted import WKMedoids, WDBSCAN, WeightedHierarchicalClustering
 from src.evaluation.metrics import calculate_metrics
+from src.evaluation.provenance import build_run_provenance
 from src.evaluation.results_manager import ResultsManager
 from src.utils.constants import PROCESSED_DATA_PATH
 from src.weighting.weight_manager import WeightManager
@@ -97,12 +98,24 @@ def run_clustering_experiment(
     else:
         result = _run_wdbscan(df, params, weight_manager)
 
+    weights_snapshot = weight_manager.get_weights()
+    result["metadata"] = {
+        **result["metadata"],
+        "provenance": build_run_provenance(
+            dataset_path=dataset_path,
+            df=df,
+            algorithm=algorithm,
+            params=result["params"],
+            weights=weights_snapshot,
+        ),
+    }
+
     run_id = None
     if persist:
         run_id = results_manager.save_run(
             algorithm=algorithm,
             params=result["params"],
-            weights=weight_manager.get_weights(),
+            weights=weights_snapshot,
             metrics=result["metrics"],
             labels=result["labels"].tolist(),
             metadata=result["metadata"],
