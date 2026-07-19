@@ -8,6 +8,13 @@ from .clustering_plots import (
     pca_projection,
     save_run_figures,
 )
+from .cluster_explainability import (
+    EXPLANATORY_DIMENSIONS,
+    cluster_dimension_scores,
+    cluster_profile_deviation,
+    cluster_profile_distance_matrix,
+    top_distinctive_features,
+)
 from .profile_interpreter import (
     PROFILE_METADATA_COLUMNS,
     feature_display_name,
@@ -15,11 +22,16 @@ from .profile_interpreter import (
 )
 
 __all__ = [
+    "EXPLANATORY_DIMENSIONS",
     "PROFILE_METADATA_COLUMNS",
+    "cluster_dimension_scores",
     "cluster_distribution",
+    "cluster_profile_deviation",
+    "cluster_profile_distance_matrix",
     "cluster_profiles",
     "feature_display_name",
     "interpret_feature_value",
     "pca_projection",
     "save_run_figures",
+    "top_distinctive_features",
 ]
