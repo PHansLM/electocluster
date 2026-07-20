@@ -25,11 +25,13 @@ from src.evaluation.results_manager import RESULTS_PATH, ResultsManager
 from src.utils.constants import PROCESSED_DATA_PATH
 from src.visualization import (
     PROFILE_METADATA_COLUMNS,
+    build_semantic_profile_export,
     cluster_dimension_scores,
     cluster_distribution,
     cluster_profile_deviation,
     cluster_profile_distance_matrix,
     cluster_profiles,
+    cluster_semantic_profiles,
     feature_display_name,
     interpret_feature_value,
     pca_projection,
@@ -90,6 +92,20 @@ METRIC_SPECS = {
         "description": "Mayor es mejor. Suele operar en una escala mucho mas amplia.",
     },
 }
+
+SEMANTIC_TYPE_LABELS = {
+    "numerico": "Numericas e indices",
+    "categorico_ordinal": "Ordinales",
+    "categorico_nominal": "Nominales",
+    "binario": "Binarias",
+}
+
+SEMANTIC_TYPE_ORDER = [
+    "numerico",
+    "categorico_nominal",
+    "categorico_ordinal",
+    "binario",
+]
 
 
 def _comparison_label(row: pd.Series) -> str:
@@ -250,6 +266,129 @@ def _dimension_scores_display(dimension_scores: pd.DataFrame) -> pd.DataFrame:
     return display
 
 
+def _semantic_summary_display(
+    summaries: pd.DataFrame,
+    feature_type: str,
+) -> pd.DataFrame:
+    if summaries.empty:
+        return summaries
+
+    common = ["feature_name", "valid_count", "missing_count"]
+    type_columns = {
+        "numerico": [
+            "mean",
+            "median",
+            "std",
+            "q1",
+            "q3",
+            "minimum",
+            "maximum",
+            "global_reference",
+            "difference_from_global",
+        ],
+        "categorico_ordinal": [
+            "representative_label",
+            "median",
+            "q1",
+            "q3",
+            "global_reference_label",
+            "difference_from_global",
+        ],
+        "categorico_nominal": [
+            "representative_label",
+            "representative_percentage",
+            "global_reference_label",
+            "global_reference_percentage",
+            "category_mapping_status",
+        ],
+        "binario": [
+            "representative_label",
+            "representative_percentage",
+            "global_reference_percentage",
+            "difference_from_global",
+            "category_mapping_status",
+        ],
+    }
+    selected_columns = common + type_columns[feature_type]
+    display = summaries[selected_columns].copy()
+    display = display.rename(
+        columns={
+            "feature_name": "variable",
+            "valid_count": "datos validos",
+            "missing_count": "datos faltantes",
+            "representative_label": "valor representativo",
+            "representative_percentage": "porcentaje representativo",
+            "mean": "media",
+            "median": "mediana",
+            "std": "desviacion estandar",
+            "q1": "Q1",
+            "q3": "Q3",
+            "minimum": "minimo",
+            "maximum": "maximo",
+            "global_reference": "referencia total",
+            "global_reference_label": "referencia total",
+            "global_reference_percentage": "porcentaje total",
+            "difference_from_global": "diferencia frente al total",
+            "category_mapping_status": "trazabilidad de categorias",
+        }
+    )
+    numeric_columns = display.select_dtypes(include="number").columns
+    display[numeric_columns] = display[numeric_columns].round(4)
+    for percentage_column in (
+        "porcentaje representativo",
+        "porcentaje total",
+    ):
+        if percentage_column in display:
+            display[percentage_column] = display[percentage_column].map(
+                lambda value: f"{value:.2f}%" if pd.notna(value) else "N/A"
+            )
+    if "trazabilidad de categorias" in display:
+        display["trazabilidad de categorias"] = display[
+            "trazabilidad de categorias"
+        ].map(
+            {
+                "configured_exact": "categorias verificadas",
+                "processed_only": "solo valor procesado",
+                "not_applicable": "no aplica",
+            }
+        )
+    return display
+
+
+def _semantic_distribution_display(distribution: pd.DataFrame) -> pd.DataFrame:
+    display = distribution[
+        [
+            "category_label",
+            "count",
+            "percentage",
+            "global_percentage",
+            "percentage_point_difference",
+        ]
+    ].copy()
+    display = display.rename(
+        columns={
+            "category_label": "categoria",
+            "count": "registros",
+            "percentage": "porcentaje del cluster",
+            "global_percentage": "porcentaje total",
+            "percentage_point_difference": "diferencia en puntos porcentuales",
+        }
+    )
+    numeric_columns = display.select_dtypes(include="number").columns
+    display[numeric_columns] = display[numeric_columns].round(2)
+    for percentage_column in (
+        "porcentaje del cluster",
+        "porcentaje total",
+    ):
+        display[percentage_column] = display[percentage_column].map(
+            lambda value: f"{value:.2f}%" if pd.notna(value) else "N/A"
+        )
+    display["diferencia en puntos porcentuales"] = display[
+        "diferencia en puntos porcentuales"
+    ].map(lambda value: f"{value:+.2f} pp" if pd.notna(value) else "N/A")
+    return display
+
+
 st.markdown("### Ejecuciones guardadas")
 st.dataframe(
     runs_df.sort_values("timestamp", ascending=False),
@@ -335,11 +474,20 @@ profile_deviations = cluster_profile_deviation(df, labels)
 top_features = top_distinctive_features(df, labels, top_n=5)
 profile_distances = cluster_profile_distance_matrix(df, labels)
 dimension_scores = cluster_dimension_scores(df, labels)
+semantic_profiles = cluster_semantic_profiles(df, labels)
 
-tab_dist, tab_profiles, tab_deviation, tab_distances, tab_dimensions, tab_projection, tab_compare = st.tabs(
+(
+    tab_dist,
+    tab_profile_analysis,
+    tab_deviation,
+    tab_distances,
+    tab_dimensions,
+    tab_projection,
+    tab_compare,
+) = st.tabs(
     [
         "Distribucion",
-        "Perfiles",
+        "Analisis de perfiles",
         "Diferencias",
         "Distancias",
         "Dimensiones",
@@ -359,25 +507,11 @@ with tab_dist:
     )
     fig_dist.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
     st.plotly_chart(fig_dist, use_container_width=True)
-    st.dataframe(distribution, use_container_width=True, hide_index=True)
-
-with tab_projection:
-    st.markdown("#### Proyeccion de apoyo")
+    st.markdown("#### Perfiles descriptivos por cluster")
     st.caption(
-        "Proyeccion de apoyo. En 28 variables, la interpretacion principal debe "
-        "venir de perfiles, diferencias y distancias entre perfiles."
+        "La tabla integra tamaño, porcentaje e interpretacion de variables, por lo que "
+        "sustituye el resumen tabular simple de distribucion."
     )
-    fig_projection = px.scatter(
-        projection,
-        x="PC1",
-        y="PC2",
-        color="cluster",
-        hover_data=["cluster_id"],
-        title="Proyeccion PCA 2D de clusters",
-    )
-    st.plotly_chart(fig_projection, use_container_width=True)
-
-with tab_profiles:
     if profiles.empty:
         st.warning("No hay perfiles disponibles para este run.")
     else:
@@ -403,6 +537,217 @@ with tab_profiles:
         )
         st.success("Figuras guardadas en results/figures.")
         st.json(paths)
+
+with tab_projection:
+    st.markdown("#### Proyeccion de apoyo")
+    st.caption(
+        "Proyeccion de apoyo. En 28 variables, la interpretacion principal debe "
+        "venir de perfiles, diferencias y distancias entre perfiles."
+    )
+    fig_projection = px.scatter(
+        projection,
+        x="PC1",
+        y="PC2",
+        color="cluster",
+        hover_data=["cluster_id"],
+        title="Proyeccion PCA 2D de clusters",
+    )
+    st.plotly_chart(fig_projection, use_container_width=True)
+
+with tab_profile_analysis:
+    st.markdown("#### Estadisticas segun el tipo de variable")
+    st.caption(
+        "Vista aditiva calculada sobre los mismos datos procesados y etiquetas del run. "
+        "No recalcula el clustering ni reemplaza los perfiles promedio historicos."
+    )
+
+    summaries = semantic_profiles.summaries
+    semantic_distributions = semantic_profiles.distributions
+    if summaries.empty:
+        st.warning("No hay perfiles semanticos disponibles para este run.")
+    else:
+        semantic_clusters = sorted(summaries["cluster_id"].unique().tolist())
+        available_types = [
+            feature_type
+            for feature_type in SEMANTIC_TYPE_ORDER
+            if feature_type in set(summaries["feature_type"])
+        ]
+        semantic_col_cluster, semantic_col_type = st.columns(2)
+        with semantic_col_cluster:
+            selected_semantic_cluster = st.selectbox(
+                "Cluster del perfil semantico",
+                options=semantic_clusters,
+                format_func=lambda cluster_id: f"Cluster {cluster_id}",
+            )
+        with semantic_col_type:
+            selected_semantic_type = st.selectbox(
+                "Tipo de variable del perfil semantico",
+                options=available_types,
+                format_func=lambda feature_type: SEMANTIC_TYPE_LABELS[feature_type],
+            )
+
+        selected_summaries = summaries[
+            (summaries["cluster_id"] == selected_semantic_cluster)
+            & (summaries["feature_type"] == selected_semantic_type)
+        ].sort_values("feature_name")
+
+        cluster_size = int(selected_summaries["cluster_size"].iloc[0])
+        semantic_metric_cluster, semantic_metric_type, semantic_metric_features = st.columns(3)
+        semantic_metric_cluster.metric("Cluster", selected_semantic_cluster)
+        semantic_metric_type.metric(
+            "Tipo",
+            SEMANTIC_TYPE_LABELS[selected_semantic_type],
+        )
+        semantic_metric_features.metric("Variables", len(selected_summaries))
+        st.caption(
+            f"Estadisticas calculadas sobre {cluster_size} registros asignados al cluster."
+        )
+
+        ambiguous_features = selected_summaries[
+            selected_summaries["category_mapping_status"] == "processed_only"
+        ]["feature_code"].tolist()
+        if ambiguous_features:
+            st.warning(
+                "No existe una correspondencia verificable entre todos los valores "
+                "procesados y las categorias configuradas para: "
+                + ", ".join(f"`{feature}`" for feature in ambiguous_features)
+                + ". Se muestran los valores procesados sin inferir etiquetas.",
+                icon=":material/info:",
+            )
+
+        st.dataframe(
+            _semantic_summary_display(selected_summaries, selected_semantic_type),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        if selected_semantic_type == "numerico":
+            st.caption(
+                "Las diferencias se expresan en la escala procesada: valor positivo "
+                "indica una media superior al total analizado."
+            )
+            difference_data = selected_summaries[
+                ["feature_name", "difference_from_global"]
+            ].copy()
+            difference_data["direccion"] = difference_data[
+                "difference_from_global"
+            ].map(lambda value: "Sobre el total" if value >= 0 else "Bajo el total")
+            fig_semantic_numeric = px.bar(
+                difference_data,
+                x="feature_name",
+                y="difference_from_global",
+                color="direccion",
+                color_discrete_map={
+                    "Sobre el total": "#2563eb",
+                    "Bajo el total": "#f97316",
+                },
+                labels={
+                    "feature_name": "Variable",
+                    "difference_from_global": "Diferencia frente al total",
+                    "direccion": "Direccion",
+                },
+                title="Diferencia de medias frente al total analizado",
+            )
+            st.plotly_chart(fig_semantic_numeric, use_container_width=True)
+        else:
+            feature_options = selected_summaries["feature_code"].tolist()
+            selected_semantic_feature = st.selectbox(
+                "Variable para inspeccionar su distribucion",
+                options=feature_options,
+                format_func=lambda feature_code: feature_display_name(feature_code),
+            )
+            selected_distribution = semantic_distributions[
+                (semantic_distributions["cluster_id"] == selected_semantic_cluster)
+                & (semantic_distributions["feature_code"] == selected_semantic_feature)
+            ].sort_values("category_value")
+
+            if selected_distribution.empty:
+                st.warning("No hay distribucion disponible para esta variable.")
+            else:
+                distribution_chart = selected_distribution[
+                    ["category_label", "percentage", "global_percentage"]
+                ].melt(
+                    id_vars="category_label",
+                    value_vars=["percentage", "global_percentage"],
+                    var_name="population",
+                    value_name="percentage_value",
+                )
+                distribution_chart["population"] = distribution_chart["population"].map(
+                    {
+                        "percentage": f"Cluster {selected_semantic_cluster}",
+                        "global_percentage": "Total analizado",
+                    }
+                )
+                fig_semantic_distribution = px.bar(
+                    distribution_chart,
+                    x="category_label",
+                    y="percentage_value",
+                    color="population",
+                    barmode="group",
+                    labels={
+                        "category_label": "Categoria",
+                        "percentage_value": "Porcentaje",
+                        "population": "Poblacion",
+                    },
+                    title=f"Distribucion de {feature_display_name(selected_semantic_feature)}",
+                )
+                st.plotly_chart(fig_semantic_distribution, use_container_width=True)
+                st.dataframe(
+                    _semantic_distribution_display(selected_distribution),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        provenance = run.get("metadata", {}).get("provenance", {})
+        execution_sha256 = provenance.get("configuration", {}).get(
+            "execution_sha256"
+        )
+        semantic_export = build_semantic_profile_export(
+            semantic_profiles,
+            run_id=selected_run_id,
+            algorithm=run.get("algorithm"),
+            run_timestamp=run.get("timestamp"),
+            dataset_sha256=current_dataset_hash,
+            execution_sha256=execution_sha256,
+            exclude_noise=True,
+        )
+        semantic_json = json.dumps(
+            semantic_export,
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+
+        st.markdown("#### Exportar evidencia completa")
+        st.caption(
+            "Las descargas incluyen todos los clusters y variables. Los CSV conservan "
+            "porcentajes numericos; el JSON agrega trazabilidad del run y del dataset."
+        )
+        export_summary, export_distributions, export_json = st.columns(3)
+        with export_summary:
+            st.download_button(
+                "Resumen semantico CSV",
+                data=summaries.to_csv(index=False).encode("utf-8"),
+                file_name=f"{selected_run_id}_perfiles_semanticos_resumen.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with export_distributions:
+            st.download_button(
+                "Distribuciones semanticas CSV",
+                data=semantic_distributions.to_csv(index=False).encode("utf-8"),
+                file_name=f"{selected_run_id}_perfiles_semanticos_distribuciones.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with export_json:
+            st.download_button(
+                "Perfiles semanticos JSON",
+                data=semantic_json,
+                file_name=f"{selected_run_id}_perfiles_semanticos.json",
+                mime="application/json",
+                use_container_width=True,
+            )
 
 with tab_deviation:
     st.caption(

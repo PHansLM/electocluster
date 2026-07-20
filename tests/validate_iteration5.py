@@ -95,6 +95,7 @@ def run_quick_checks() -> None:
         "src.evaluation.results_manager",
         "src.evaluation.report_generator",
         "src.visualization.clustering_plots",
+        "src.visualization.semantic_profiles",
     ]
     for module in modules:
         importlib.import_module(module)
@@ -132,6 +133,9 @@ def run_quick_checks() -> None:
 
     print("[quick] Checking safe report comparability")
     _check_comparability()
+
+    print("[quick] Checking additive semantic cluster profiles")
+    _check_semantic_profiles()
 
     print("[quick] Checking persisted canonical runs")
     metrics_dir = PROJECT_ROOT / "results" / "metrics"
@@ -277,6 +281,159 @@ def _check_comparability() -> None:
         invalid_report = generator.compare_runs(["run_a", "run_c"], "invalid")
         assert not invalid_report["comparability"]["directly_comparable"]
         assert invalid_report["best_by_metric"] == {}
+
+
+def _check_semantic_profiles() -> None:
+    import numpy as np
+    import pandas as pd
+    from pandas.testing import assert_frame_equal
+
+    from src.visualization.clustering_plots import cluster_profiles
+    from src.visualization.semantic_profiles import (
+        SEMANTIC_PROFILE_EXPORT_SCHEMA,
+        build_semantic_profile_export,
+        cluster_semantic_profiles,
+    )
+
+    df = pd.DataFrame(
+        {
+            "numeric": [0.0, 0.5, 1.0, 0.25, 0.25, 0.9],
+            "nominal": [0.0, 0.0, 1.0, 1.0, 1.0, 0.0],
+            "ordinal": [0.0, 0.5, 1.0, 0.5, 0.5, 1.0],
+            "binary": [1.0, 1.0, 0.0, 0.0, 1.0, 1.0],
+            "ambiguous": [0.0, 0.5, 1.0, 0.5, 1.0, 0.0],
+        }
+    )
+    labels = np.array([0, 0, 0, 1, 1, -1])
+    metadata = {
+        "numeric": {"nombre": "Numerica", "tipo": "numerico", "rango": (0, 100)},
+        "nominal": {
+            "nombre": "Nominal",
+            "tipo": "categorico_nominal",
+            "categorias": {1: "A", 2: "B"},
+        },
+        "ordinal": {
+            "nombre": "Ordinal",
+            "tipo": "categorico_ordinal",
+            "rango": (1, 3),
+            "categorias": {1: "Bajo", 2: "Medio", 3: "Alto"},
+        },
+        "binary": {
+            "nombre": "Binaria",
+            "tipo": "binario",
+            "categorias": {0: "No", 1: "Si"},
+        },
+        "ambiguous": {
+            "nombre": "Nominal ambigua",
+            "tipo": "categorico_nominal",
+            "categorias": {1: "A", 2: "B", 3: "C", 4: "D"},
+        },
+    }
+
+    original_df = df.copy(deep=True)
+    original_labels = labels.copy()
+    legacy_before = cluster_profiles(df, labels)
+    semantic = cluster_semantic_profiles(df, labels, feature_metadata=metadata)
+    legacy_after = cluster_profiles(df, labels)
+
+    assert_frame_equal(df, original_df)
+    assert np.array_equal(labels, original_labels)
+    assert_frame_equal(legacy_after, legacy_before)
+    assert set(semantic.summaries["cluster_id"]) == {0, 1}
+    assert -1 not in set(semantic.summaries["cluster_id"])
+
+    def summary(cluster_id: int, feature_code: str):
+        matches = semantic.summaries[
+            (semantic.summaries["cluster_id"] == cluster_id)
+            & (semantic.summaries["feature_code"] == feature_code)
+        ]
+        assert len(matches) == 1
+        return matches.iloc[0]
+
+    numeric = summary(0, "numeric")
+    assert numeric["representative_statistic"] == "mean"
+    assert math.isclose(float(numeric["mean"]), 0.5)
+    assert math.isclose(float(numeric["median"]), 0.5)
+    assert math.isclose(float(numeric["std"]), math.sqrt(1 / 6))
+    assert numeric["difference_unit"] == "processed_scale"
+
+    nominal = summary(0, "nominal")
+    assert nominal["representative_statistic"] == "mode"
+    assert nominal["representative_label"] == "A"
+    assert math.isclose(float(nominal["representative_percentage"]), 200 / 3)
+    assert math.isnan(float(nominal["difference_from_global"]))
+
+    ordinal = summary(0, "ordinal")
+    assert ordinal["representative_statistic"] == "median"
+    assert ordinal["representative_label"] == "Medio"
+    assert math.isclose(float(ordinal["median"]), 0.5)
+
+    binary = summary(0, "binary")
+    assert binary["representative_statistic"] == "prevalence"
+    assert binary["representative_label"] == "Si"
+    assert math.isclose(float(binary["representative_percentage"]), 200 / 3)
+    assert math.isclose(float(binary["global_reference_percentage"]), 60.0)
+    assert math.isclose(float(binary["difference_from_global"]), 20 / 3)
+    assert binary["difference_unit"] == "percentage_points"
+
+    ambiguous = summary(0, "ambiguous")
+    assert ambiguous["category_mapping_status"] == "processed_only"
+    assert ambiguous["representative_label"] == "Valor procesado 0"
+
+    nominal_b = semantic.distributions[
+        (semantic.distributions["cluster_id"] == 0)
+        & (semantic.distributions["feature_code"] == "nominal")
+        & (semantic.distributions["category_label"] == "B")
+    ].iloc[0]
+    assert int(nominal_b["count"]) == 1
+    assert math.isclose(float(nominal_b["percentage"]), 100 / 3)
+    assert math.isclose(float(nominal_b["global_percentage"]), 60.0)
+
+    export = build_semantic_profile_export(
+        semantic,
+        run_id="semantic_test_run",
+        algorithm="Algorithm Test",
+        run_timestamp="2026-07-20T12:00:00",
+        dataset_sha256="a" * 64,
+        execution_sha256="b" * 64,
+    )
+    assert export["schema"] == SEMANTIC_PROFILE_EXPORT_SCHEMA
+    assert export["source"]["run_id"] == "semantic_test_run"
+    assert export["source"]["dataset_sha256"] == "a" * 64
+    assert export["analysis"]["population_id"] == "clustered_samples_without_noise_v1"
+    assert export["analysis"]["cluster_ids"] == [0, 1]
+    assert export["analysis"]["feature_count"] == len(df.columns)
+    assert export["analysis"]["processed_only_features"] == ["ambiguous"]
+    assert len(export["tables"]["summaries"]) == len(semantic.summaries)
+    assert len(export["tables"]["distributions"]) == len(semantic.distributions)
+    json.dumps(export, ensure_ascii=False, allow_nan=False)
+
+    with_noise = cluster_semantic_profiles(
+        df,
+        labels,
+        exclude_noise=False,
+        feature_metadata=metadata,
+    )
+    assert -1 in set(with_noise.summaries["cluster_id"])
+    assert "noise" in set(with_noise.summaries["cluster"])
+
+    try:
+        cluster_semantic_profiles(df, labels[:-1], feature_metadata=metadata)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Semantic profiles accepted labels with an invalid length.")
+
+    try:
+        cluster_semantic_profiles(
+            df,
+            np.array([0, 0, 0, 1, 1, 1.5]),
+            feature_metadata=metadata,
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Semantic profiles accepted non-integer labels.")
 
 
 def _check_wkmedoids_contract(WKMedoids) -> None:
@@ -595,6 +752,76 @@ def run_streamlit_checks() -> None:
         app = AppTest.from_file(str(PROJECT_ROOT / page))
         app.run(timeout=20)
         assert not app.exception, f"{page} raised Streamlit exceptions: {app.exception}"
+
+        if page == "src/pages/4_resultados.py":
+            tab_labels = [tab.label for tab in app.tabs]
+            assert "Perfiles" not in tab_labels
+            assert "Analisis de perfiles" in tab_labels
+            download_labels = [
+                button.label for button in app.get("download_button")
+            ]
+            button_labels = [button.label for button in app.button]
+            assert "Descargar perfiles CSV" in download_labels
+            assert {
+                "Resumen semantico CSV",
+                "Distribuciones semanticas CSV",
+                "Perfiles semanticos JSON",
+            } <= set(download_labels)
+            assert "Guardar figuras exportables" in button_labels
+
+            selectboxes = {selectbox.label: selectbox for selectbox in app.selectbox}
+            assert "Cluster del perfil semantico" in selectboxes
+            assert "Tipo de variable del perfil semantico" in selectboxes
+
+            for feature_type in (
+                "categorico_nominal",
+                "categorico_ordinal",
+                "binario",
+            ):
+                current_selectboxes = {
+                    selectbox.label: selectbox for selectbox in app.selectbox
+                }
+                current_selectboxes["Tipo de variable del perfil semantico"].select(
+                    feature_type
+                ).run(timeout=20)
+                assert not app.exception, (
+                    f"Semantic {feature_type} profile raised Streamlit exceptions: "
+                    f"{app.exception}"
+                )
+                updated_labels = [selectbox.label for selectbox in app.selectbox]
+                assert "Variable para inspeccionar su distribucion" in updated_labels
+
+                if feature_type == "categorico_nominal":
+                    assert any("leng1" in warning.value for warning in app.warning)
+                    semantic_summary = next(
+                        dataframe.value
+                        for dataframe in app.dataframe
+                        if "porcentaje representativo" in dataframe.value.columns
+                    )
+                    semantic_distribution = next(
+                        dataframe.value
+                        for dataframe in app.dataframe
+                        if "porcentaje del cluster" in dataframe.value.columns
+                    )
+                    for column in (
+                        "porcentaje representativo",
+                        "porcentaje total",
+                    ):
+                        assert semantic_summary[column].map(
+                            lambda value: value == "N/A" or str(value).endswith("%")
+                        ).all()
+                    for column in (
+                        "porcentaje del cluster",
+                        "porcentaje total",
+                    ):
+                        assert semantic_distribution[column].map(
+                            lambda value: value == "N/A" or str(value).endswith("%")
+                        ).all()
+                    assert semantic_distribution[
+                        "diferencia en puntos porcentuales"
+                    ].map(
+                        lambda value: value == "N/A" or str(value).endswith(" pp")
+                    ).all()
 
 
 if __name__ == "__main__":
