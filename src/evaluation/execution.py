@@ -16,7 +16,6 @@ import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
 
-from src.clustering.weighted import WKMedoids, WDBSCAN, WeightedHierarchicalClustering
 from src.evaluation.feature_space import (
     ALL_SAMPLES_V1,
     CLUSTERED_WITHOUT_NOISE_V1,
@@ -165,6 +164,8 @@ def _run_wkmedoids(
     params: dict,
     weight_manager: WeightManager,
 ) -> dict:
+    from src.clustering.weighted.weighted_kmedoids import WKMedoids
+
     clean_params = {
         "n_clusters": int(params.get("n_clusters", 13)),
         "random_state": int(params.get("random_state", 42)),
@@ -200,6 +201,10 @@ def _run_whierarchical(
     params: dict,
     weight_manager: WeightManager,
 ) -> dict:
+    from src.clustering.weighted.weighted_hierarchical import (
+        WeightedHierarchicalClustering,
+    )
+
     clean_params = {
         "n_clusters": int(params.get("n_clusters", 2)),
         "linkage": params.get("linkage", "complete"),
@@ -234,6 +239,8 @@ def _run_wdbscan(
     params: dict,
     weight_manager: WeightManager,
 ) -> dict:
+    from src.clustering.weighted.weighted_dbscan import WDBSCAN
+
     clean_params = {
         "eps": float(params.get("eps", 0.606)),
         "min_samples": int(params.get("min_samples", 34)),
