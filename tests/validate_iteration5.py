@@ -134,6 +134,9 @@ def run_quick_checks() -> None:
     print("[quick] Checking safe report comparability")
     _check_comparability()
 
+    print("[quick] Checking canonical suite evidence contract")
+    _check_canonical_suite()
+
     print("[quick] Checking additive semantic cluster profiles")
     _check_semantic_profiles()
 
@@ -281,6 +284,33 @@ def _check_comparability() -> None:
         invalid_report = generator.compare_runs(["run_a", "run_c"], "invalid")
         assert not invalid_report["comparability"]["directly_comparable"]
         assert invalid_report["best_by_metric"] == {}
+
+
+def _check_canonical_suite() -> None:
+    from src.evaluation.canonical_suite import (
+        CANONICAL_METRIC_BASELINES,
+        CANONICAL_SUITE_SCHEMA,
+        evaluate_canonical_regression,
+    )
+    from src.evaluation.results_manager import ResultsManager
+
+    metrics = CANONICAL_METRIC_BASELINES["WKMedoids"]
+    assert evaluate_canonical_regression("WKMedoids", metrics)["passed"]
+    changed = {**metrics, "silhouette": metrics["silhouette"] + 0.01}
+    assert not evaluate_canonical_regression("WKMedoids", changed)["passed"]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manager = ResultsManager(results_path=tmpdir)
+        suite_id = manager.save_suite({
+            "schema": CANONICAL_SUITE_SCHEMA,
+            "generated_at": "2026-07-24T00:00:00",
+            "runs": [{"algorithm": "WKMedoids"}],
+            "comparability": {"status": "incompatible"},
+            "regression": {"all_passed": True},
+        }, suite_id="suite_test")
+        assert suite_id == "suite_test"
+        assert manager.load_suite(suite_id)["schema"] == CANONICAL_SUITE_SCHEMA
+        assert manager.list_suites()[0]["regression_passed"]
 
 
 def _check_semantic_profiles() -> None:
@@ -692,7 +722,10 @@ def run_sample_checks(sample_size: int) -> None:
     print(f"[sample] Running algorithms on {sample_size} temporary rows")
     import pandas as pd
 
-    from src.evaluation.execution import default_params, run_clustering_experiment
+    from src.evaluation.canonical_suite import (
+        CANONICAL_SUITE_SCHEMA,
+        run_canonical_suite,
+    )
     from src.utils.constants import PROCESSED_DATA_PATH
 
     df = pd.read_csv(PROCESSED_DATA_PATH).head(sample_size)
@@ -712,15 +745,16 @@ def run_sample_checks(sample_size: int) -> None:
             "W-Hierarchical Clustering": "all_samples_v1",
             "W-DBSCAN": "clustered_samples_without_noise_v1",
         }
-        for algorithm in EXPECTED_CANONICAL:
-            print(f"[sample] Running {algorithm}")
-            with contextlib.redirect_stdout(io.StringIO()):
-                result = run_clustering_experiment(
-                    algorithm,
-                    default_params(algorithm),
-                    dataset_path=str(sample_path),
-                    persist=False,
-                )
+        print("[sample] Running consolidated canonical suite")
+        with contextlib.redirect_stdout(io.StringIO()):
+            suite = run_canonical_suite(dataset_path=str(sample_path), persist=False)
+        assert suite.suite_id is None
+        assert suite.artifact["schema"] == CANONICAL_SUITE_SCHEMA
+        assert len(suite.artifact["runs"]) == len(EXPECTED_CANONICAL)
+        assert suite.artifact["comparability"]["status"] == "incompatible"
+        suite_records = {item["algorithm"]: item for item in suite.artifact["runs"]}
+        for result in suite.results:
+            algorithm = result.algorithm
             assert result.run_id is None, f"{algorithm} unexpectedly persisted a run."
             assert len(result.labels) == sample_size, f"{algorithm} returned wrong label count."
             assert result.model is not None, f"{algorithm} did not return a model."
@@ -731,6 +765,9 @@ def run_sample_checks(sample_size: int) -> None:
             evaluation_context = result.metadata.get("evaluation_context", {})
             assert evaluation_context.get("metric_space", {}).get("id") == expected_metric_spaces[algorithm]
             assert evaluation_context.get("population", {}).get("id") == expected_populations[algorithm]
+            suite_record = suite_records[algorithm]
+            assert suite_record["semantic_profiles"]["source"]["algorithm"] == algorithm
+            assert "elapsed_seconds" in suite_record
             del result
             gc.collect()
 
@@ -768,6 +805,7 @@ def run_streamlit_checks() -> None:
                 "Perfiles semanticos JSON",
             } <= set(download_labels)
             assert "Guardar figuras exportables" in button_labels
+            assert "Descargar evidencia integrada JSON" not in download_labels
 
             selectboxes = {selectbox.label: selectbox for selectbox in app.selectbox}
             assert "Cluster del perfil semantico" in selectboxes

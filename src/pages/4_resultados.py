@@ -396,6 +396,61 @@ st.dataframe(
     hide_index=True,
 )
 
+suites = rm.list_suites()
+with st.expander("Evidencia integrada de la bateria canonica", expanded=False):
+    if not suites:
+        st.caption(
+            "Aun no existe una bateria integrada. En Ejecucion, selecciona los tres "
+            "algoritmos y usa sus configuraciones canonicas."
+        )
+    else:
+        suite_options = [suite["suite_id"] for suite in suites]
+        default_suite = st.session_state.get("last_canonical_suite_id")
+        suite_index = suite_options.index(default_suite) if default_suite in suite_options else 0
+        selected_suite_id = st.selectbox(
+            "Bateria canonica consolidada",
+            options=suite_options,
+            index=suite_index,
+        )
+        suite = rm.load_suite(selected_suite_id)
+        regression = suite.get("regression", {})
+        comparability = suite.get("comparability", {})
+        state_col, comparison_col = st.columns(2)
+        state_col.metric(
+            "Control historico",
+            "Conforme" if regression.get("all_passed") else "Revisar",
+        )
+        comparison_col.metric(
+            "Comparabilidad", comparability.get("status", "no registrada")
+        )
+        if not comparability.get("directly_comparable"):
+            st.info(
+                "La bateria conserva cobertura y ruido por algoritmo, pero no genera un "
+                "ranking global cuando los espacios o poblaciones de evaluacion difieren.",
+                icon=":material/info:",
+            )
+        suite_table = pd.DataFrame([
+            {
+                "algoritmo": item.get("algorithm"),
+                "run_id": item.get("run_id"),
+                "clusters": item.get("n_clusters"),
+                "evaluadas": item.get("evaluation", {}).get("n_evaluated"),
+                "cobertura (%)": item.get("evaluation", {}).get("coverage_percentage"),
+                "ruido": item.get("n_noise"),
+                "silhouette": item.get("metrics", {}).get("silhouette"),
+                "tiempo (s)": item.get("elapsed_seconds"),
+                "regresion": item.get("regression", {}).get("status"),
+            }
+            for item in suite.get("runs", [])
+        ])
+        st.dataframe(suite_table, use_container_width=True, hide_index=True)
+        st.download_button(
+            "Descargar evidencia integrada JSON",
+            data=json.dumps(suite, indent=2, ensure_ascii=False, allow_nan=False).encode("utf-8"),
+            file_name=f"{selected_suite_id}.json",
+            mime="application/json",
+        )
+
 run_options = runs_df["run_id"].tolist()
 default_run = st.session_state.get("last_run_id")
 default_index = run_options.index(default_run) if default_run in run_options else 0

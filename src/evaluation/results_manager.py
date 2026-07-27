@@ -34,13 +34,49 @@ class ResultsManager:
         self._ensure_directories()
 
     def _ensure_directories(self):
-        for subdir in ["metrics", "assignments", "comparisons", "reports", "figures"]:
+        for subdir in ["metrics", "assignments", "comparisons", "reports", "figures", "suites"]:
             (self.results_path / subdir).mkdir(parents=True, exist_ok=True)
 
     def _generate_run_id(self, algorithm: str) -> str:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         safe_algorithm = algorithm.lower().replace(" ", "_").replace("-", "")
         return f"{safe_algorithm}_{ts}"
+
+    def generate_suite_id(self) -> str:
+        """Genera un identificador para una bateria integrada de ejecuciones."""
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        return f"canonical_suite_{ts}"
+
+    def save_suite(self, artifact: dict, suite_id: str = None) -> str:
+        """Persiste un artefacto consolidado sin duplicar los runs individuales."""
+        suite_id = suite_id or self.generate_suite_id()
+        record = {**self._json_safe(artifact), "suite_id": suite_id}
+        path = self.results_path / "suites" / f"{suite_id}.json"
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(record, f, indent=2, ensure_ascii=False, allow_nan=False)
+        return suite_id
+
+    def list_suites(self) -> list[dict]:
+        """Lista artefactos consolidados por fecha descendente."""
+        suites = []
+        for path in (self.results_path / "suites").glob("*.json"):
+            with open(path, encoding="utf-8") as f:
+                suite = json.load(f)
+            suites.append({
+                "suite_id": suite.get("suite_id"),
+                "generated_at": suite.get("generated_at"),
+                "regression_passed": suite.get("regression", {}).get("all_passed"),
+                "comparability_status": suite.get("comparability", {}).get("status"),
+                "algorithms": [run.get("algorithm") for run in suite.get("runs", [])],
+            })
+        return sorted(suites, key=lambda suite: suite.get("generated_at") or "", reverse=True)
+
+    def load_suite(self, suite_id: str) -> dict:
+        path = self.results_path / "suites" / f"{suite_id}.json"
+        if not path.exists():
+            raise FileNotFoundError(f"No existe suite con suite_id: {suite_id}")
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
 
     def save_run(
         self,
