@@ -27,10 +27,16 @@ Lib/site-packages/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Data and results (do not commit raw datasets or large outputs)
-data/raw/
-data/synthetic/
-data/processed/
+# Data and results (do not commit raw datasets or large outputs).
+# Keep a README in each data directory so the expected structure exists after cloning.
+data/raw/*
+!data/raw/README.md
+data/processed/*
+!data/processed/README.md
+data/synthetic/*
+!data/synthetic/README.md
+data/uploads/*
+!data/uploads/README.md
 results/
 
 # Environment files
