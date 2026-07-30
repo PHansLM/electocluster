@@ -37,21 +37,33 @@ edición de LAPOP si se busca reproducir la evidencia canónica.
 
 ## Dependencias e instalación (PowerShell)
 
-Se recomienda crear un entorno virtual limpio. En PowerShell (Windows):
+El proyecto requiere **Python 3.10 o 3.11**; se recomienda Python 3.11 en
+Windows. `scikit-learn-extra==0.3.0`, utilizado por WKMedoids, no es compatible
+con Python 3.12 o posterior porque sus distribuciones de Windows llegan hasta
+CPython 3.11 y el paquete aún importa `distutils`.
+
+Comprueba primero que Python 3.11 esté disponible:
+
+```powershell
+py -3.11 --version
+```
+
+Si no aparece, instálalo antes de continuar. Luego crea un entorno virtual
+limpio. En PowerShell (Windows):
 
 ```powershell
 cd C:\electocluster
-# Crear entorno virtual (usar nombre que prefieras)
-python -m venv .venv
+# Crear un entorno con Python 3.11
+py -3.11 -m venv .venv311
 
 # Activar el entorno
-.\.venv\Scripts\Activate.ps1
+.\.venv311\Scripts\Activate.ps1
 
 # Instalar dependencias
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# (Opcional) Si ya usas otro virtualenv como 'venv_clustering', actívalo en lugar de crear uno nuevo.
+# (Opcional) Si ya usas otro virtualenv compatible, actívalo en lugar de crear uno nuevo.
 ```
 
 ## Ejecutar notebooks
