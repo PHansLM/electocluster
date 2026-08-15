@@ -21,11 +21,15 @@ from src.evaluation.feature_space import (
     CLUSTERED_WITHOUT_NOISE_V1,
     COMMON_PROCESSED_V1,
     DIRECT_WEIGHTED_DISTANCE_V1,
+    GEOMETRY_METRICS_SCHEMA,
+    HISTORICAL_READING_V1,
     PRECOMPUTED_DISTANCE_V1,
     WEIGHTED_PCA_V1,
+    WEIGHTED_GEOMETRY_READING_V1,
     build_evaluation_context,
+    build_metric_reading,
 )
-from src.evaluation.metrics import calculate_metrics
+from src.evaluation.metrics import calculate_metrics, calculate_weighted_geometry_metrics
 from src.evaluation.provenance import build_run_provenance
 from src.evaluation.results_manager import ResultsManager
 from src.utils.constants import PROCESSED_DATA_PATH
@@ -33,6 +37,29 @@ from src.weighting.weight_manager import WeightManager
 
 
 ALGORITHMS = ["WKMedoids", "W-Hierarchical Clustering", "W-DBSCAN"]
+
+# Los identificadores se conservan porque forman parte de resultados y controles
+# históricos. Este catálogo describe con precisión lo que ejecuta el código.
+ALGORITHM_IMPLEMENTATIONS = {
+    "WKMedoids": {
+        "implementation_name": "K-Medoids con distancia euclidiana global ponderada",
+        "weighting_strategy": "Distancia precomputada sqrt(sum(w_i * (x_i - y_i)^2)) sobre las variables procesadas.",
+        "method_family": "particional basado en medoides",
+        "not_equivalent_to": [],
+    },
+    "W-Hierarchical Clustering": {
+        "implementation_name": "Clustering aglomerativo con distancia euclidiana global ponderada",
+        "weighting_strategy": "Matriz de distancia ponderada global con enlace configurable.",
+        "method_family": "aglomerativo",
+        "not_equivalent_to": ["Ward_p"],
+    },
+    "W-DBSCAN": {
+        "implementation_name": "DBSCAN sobre PCA de variables ponderadas (pipeline histórico)",
+        "weighting_strategy": "Transformación histórica X * weights, PCA y distancia euclidiana precomputada sobre las componentes.",
+        "method_family": "clustering basado en densidad",
+        "not_equivalent_to": ["W-DBSCANR"],
+    },
+}
 
 
 class _UniformWeightManager:
@@ -109,6 +136,7 @@ def run_clustering_experiment(
     weights_snapshot = weight_manager.get_weights()
     result["metadata"] = {
         **result["metadata"],
+        "implementation": describe_algorithm_implementation(algorithm),
         "provenance": build_run_provenance(
             dataset_path=dataset_path,
             df=df,
@@ -159,6 +187,63 @@ def canonical_experiments() -> list[tuple[str, dict]]:
     return [(algorithm, default_params(algorithm)) for algorithm in ALGORITHMS]
 
 
+def describe_algorithm_implementation(algorithm: str) -> dict:
+    """Devuelve metadatos metodológicos sin cambiar identificadores históricos."""
+    implementation = ALGORITHM_IMPLEMENTATIONS.get(algorithm)
+    if implementation is None:
+        raise ValueError(f"Algoritmo no soportado: {algorithm}")
+    return {"identifier": algorithm, **implementation}
+
+
+def _metric_readings(
+    *,
+    historical_metrics: dict,
+    historical_space: str,
+    historical_population: str,
+    historical_silhouette_definition: str,
+    historical_coordinate_definition: str,
+    geometry_metrics: dict,
+    geometry_space: str,
+    geometry_population: str,
+    geometry_silhouette_definition: str,
+    geometry_coordinate_definition: str,
+    geometry_relationship: str,
+) -> dict:
+    """Construye las dos lecturas sin cambiar el contrato histórico de metrics."""
+    return {
+        HISTORICAL_READING_V1: build_metric_reading(
+            reading=HISTORICAL_READING_V1,
+            metric_space=historical_space,
+            population=historical_population,
+            metrics=historical_metrics,
+            silhouette_definition=historical_silhouette_definition,
+            coordinate_definition=historical_coordinate_definition,
+            relationship_to_historical="self",
+        ),
+        WEIGHTED_GEOMETRY_READING_V1: build_metric_reading(
+            reading=WEIGHTED_GEOMETRY_READING_V1,
+            metric_space=geometry_space,
+            population=geometry_population,
+            metrics=geometry_metrics,
+            silhouette_definition=geometry_silhouette_definition,
+            coordinate_definition=geometry_coordinate_definition,
+            relationship_to_historical=geometry_relationship,
+        ),
+    }
+
+
+def _legacy_geometry_metrics(reading: dict) -> dict:
+    """Mantiene el campo geometry_metrics de artefactos de transición."""
+    return {
+        "schema": GEOMETRY_METRICS_SCHEMA,
+        "space": reading["space"]["id"],
+        "population": reading["population"]["id"],
+        "metrics": reading["metrics"],
+        "silhouette_definition": reading["silhouette_definition"],
+        "coordinate_definition": reading["coordinate_definition"],
+    }
+
+
 def _run_wkmedoids(
     df: pd.DataFrame,
     params: dict,
@@ -178,11 +263,29 @@ def _run_wkmedoids(
     model.fit(df)
     labels = np.asarray(model.labels_, dtype=int)
     metrics = _safe_metrics(df, labels)
+    geometry_metrics = calculate_weighted_geometry_metrics(df, labels, weight_manager)
+    metric_readings = _metric_readings(
+        historical_metrics=metrics,
+        historical_space=COMMON_PROCESSED_V1,
+        historical_population=ALL_SAMPLES_V1,
+        historical_silhouette_definition="euclidean_processed_dataset",
+        historical_coordinate_definition="processed_features",
+        geometry_metrics=geometry_metrics,
+        geometry_space=DIRECT_WEIGHTED_DISTANCE_V1,
+        geometry_population=ALL_SAMPLES_V1,
+        geometry_silhouette_definition="precomputed_weighted_distance",
+        geometry_coordinate_definition="processed_features_times_sqrt_weights",
+        geometry_relationship="distinct_weighted_geometry",
+    )
     metadata = {
         "evaluation_space": "processed_dataset",
         "excluded_noise": False,
         "n_evaluated": int(len(labels)),
         "inertia": float(model.inertia_) if model.inertia_ is not None else None,
+        "metric_readings": metric_readings,
+        "geometry_metrics": _legacy_geometry_metrics(
+            metric_readings[WEIGHTED_GEOMETRY_READING_V1]
+        ),
         "evaluation_context": build_evaluation_context(
             clustering_space=DIRECT_WEIGHTED_DISTANCE_V1,
             model_input_space=PRECOMPUTED_DISTANCE_V1,
@@ -217,10 +320,28 @@ def _run_whierarchical(
     model.fit(df)
     labels = np.asarray(model.labels_, dtype=int)
     metrics = _safe_metrics(df, labels)
+    geometry_metrics = calculate_weighted_geometry_metrics(df, labels, weight_manager)
+    metric_readings = _metric_readings(
+        historical_metrics=metrics,
+        historical_space=COMMON_PROCESSED_V1,
+        historical_population=ALL_SAMPLES_V1,
+        historical_silhouette_definition="euclidean_processed_dataset",
+        historical_coordinate_definition="processed_features",
+        geometry_metrics=geometry_metrics,
+        geometry_space=DIRECT_WEIGHTED_DISTANCE_V1,
+        geometry_population=ALL_SAMPLES_V1,
+        geometry_silhouette_definition="precomputed_weighted_distance",
+        geometry_coordinate_definition="processed_features_times_sqrt_weights",
+        geometry_relationship="distinct_weighted_geometry",
+    )
     metadata = {
         "evaluation_space": "processed_dataset",
         "excluded_noise": False,
         "n_evaluated": int(len(labels)),
+        "metric_readings": metric_readings,
+        "geometry_metrics": _legacy_geometry_metrics(
+            metric_readings[WEIGHTED_GEOMETRY_READING_V1]
+        ),
         "evaluation_context": build_evaluation_context(
             clustering_space=DIRECT_WEIGHTED_DISTANCE_V1,
             model_input_space=PRECOMPUTED_DISTANCE_V1,
@@ -272,6 +393,19 @@ def _run_wdbscan(
     eval_data = df_pca.loc[eval_mask].copy()
     eval_labels = labels[eval_mask]
     metrics = _safe_metrics(eval_data, eval_labels)
+    metric_readings = _metric_readings(
+        historical_metrics=metrics,
+        historical_space=WEIGHTED_PCA_V1,
+        historical_population=CLUSTERED_WITHOUT_NOISE_V1,
+        historical_silhouette_definition="euclidean_weighted_pca",
+        historical_coordinate_definition="historical_weighted_features_then_pca",
+        geometry_metrics=metrics,
+        geometry_space=WEIGHTED_PCA_V1,
+        geometry_population=CLUSTERED_WITHOUT_NOISE_V1,
+        geometry_silhouette_definition="euclidean_weighted_pca",
+        geometry_coordinate_definition="historical_weighted_features_then_pca",
+        geometry_relationship="identical_space_and_population",
+    )
 
     metadata = {
         "evaluation_space": "weighted_pca_without_noise",
@@ -281,6 +415,10 @@ def _run_wdbscan(
         "pca_explained_variance": float(pca.explained_variance_ratio_.sum()),
         "n_noise": int((labels == -1).sum()),
         "noise_percentage": float((labels == -1).sum() / len(labels) * 100),
+        "metric_readings": metric_readings,
+        "geometry_metrics": _legacy_geometry_metrics(
+            metric_readings[WEIGHTED_GEOMETRY_READING_V1]
+        ),
         "evaluation_context": build_evaluation_context(
             clustering_space=WEIGHTED_PCA_V1,
             model_input_space=PRECOMPUTED_DISTANCE_V1,

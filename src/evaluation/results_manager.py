@@ -66,6 +66,9 @@ class ResultsManager:
                 "suite_id": suite.get("suite_id"),
                 "generated_at": suite.get("generated_at"),
                 "regression_passed": suite.get("regression", {}).get("all_passed"),
+                "geometry_regression_passed": suite.get("geometry_regression", {}).get(
+                    "all_passed"
+                ),
                 "comparability_status": suite.get("comparability", {}).get("status"),
                 "algorithms": [run.get("algorithm") for run in suite.get("runs", [])],
             })

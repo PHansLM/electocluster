@@ -444,12 +444,6 @@ with st.expander("Evidencia integrada de la bateria canonica", expanded=False):
             for item in suite.get("runs", [])
         ])
         st.dataframe(suite_table, use_container_width=True, hide_index=True)
-        st.download_button(
-            "Descargar evidencia integrada JSON",
-            data=json.dumps(suite, indent=2, ensure_ascii=False, allow_nan=False).encode("utf-8"),
-            file_name=f"{selected_suite_id}.json",
-            mime="application/json",
-        )
 
 run_options = runs_df["run_id"].tolist()
 default_run = st.session_state.get("last_run_id")

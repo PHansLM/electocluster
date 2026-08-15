@@ -16,7 +16,7 @@ from src.visualization.semantic_profiles import (
 )
 
 
-CANONICAL_SUITE_SCHEMA = "iteration5-canonical-suite-v1"
+CANONICAL_SUITE_SCHEMA = "iteration5-canonical-suite-v2"
 CANONICAL_METRIC_BASELINES = {
     "WKMedoids": {
         "silhouette": 0.10623499888238168,
@@ -27,6 +27,23 @@ CANONICAL_METRIC_BASELINES = {
         "silhouette": 0.14090720223511682,
         "davies_bouldin": 2.3074104414738756,
         "calinski_harabasz": 254.6930434573174,
+    },
+    "W-DBSCAN": {
+        "silhouette": 0.29576400377933976,
+        "davies_bouldin": 1.3593183247417573,
+        "calinski_harabasz": 120.30614949115017,
+    },
+}
+CANONICAL_GEOMETRY_BASELINES = {
+    "WKMedoids": {
+        "silhouette": 0.10660470136607983,
+        "davies_bouldin": 2.4834680633648007,
+        "calinski_harabasz": 99.85805003962231,
+    },
+    "W-Hierarchical Clustering": {
+        "silhouette": 0.15988265892863396,
+        "davies_bouldin": 2.145030183175951,
+        "calinski_harabasz": 294.91586000542753,
     },
     "W-DBSCAN": {
         "silhouette": 0.29576400377933976,
@@ -53,7 +70,38 @@ def evaluate_canonical_regression(
     tolerance: float = CANONICAL_METRIC_TOLERANCE,
 ) -> dict[str, Any]:
     """Contrasta metricas contra el control historico sin alterar el resultado."""
-    expected = CANONICAL_METRIC_BASELINES.get(algorithm)
+    return _evaluate_against_baseline(
+        algorithm,
+        metrics,
+        baselines=CANONICAL_METRIC_BASELINES,
+        tolerance=tolerance,
+    )
+
+
+def evaluate_geometry_regression(
+    algorithm: str,
+    metrics: dict[str, Any],
+    *,
+    tolerance: float = CANONICAL_METRIC_TOLERANCE,
+) -> dict[str, Any]:
+    """Contrasta la lectura geométrica con su línea base independiente."""
+    return _evaluate_against_baseline(
+        algorithm,
+        metrics,
+        baselines=CANONICAL_GEOMETRY_BASELINES,
+        tolerance=tolerance,
+    )
+
+
+def _evaluate_against_baseline(
+    algorithm: str,
+    metrics: dict[str, Any],
+    *,
+    baselines: dict[str, dict[str, float]],
+    tolerance: float,
+) -> dict[str, Any]:
+    """Evalúa una lectura contra una línea base sin mezclar sus espacios."""
+    expected = baselines.get(algorithm)
     if expected is None:
         return {"status": "not_registered", "passed": False, "metrics": {}}
 
@@ -138,6 +186,14 @@ def run_canonical_suite(
                 run["algorithm"]: run["regression"] for run in suite_runs
             },
         },
+        "geometry_regression": {
+            "all_passed": all(
+                run["geometry_regression"]["passed"] for run in suite_runs
+            ),
+            "checks": {
+                run["algorithm"]: run["geometry_regression"] for run in suite_runs
+            },
+        },
     }
 
     if persist:
@@ -154,6 +210,8 @@ def _suite_run_record(
 ) -> dict[str, Any]:
     labels = result.labels
     metadata = result.metadata
+    metric_readings = metadata.get("metric_readings", {})
+    geometry_reading = metric_readings.get("weighted_geometry", {})
     provenance = metadata.get("provenance", {})
     evaluation = run_evaluation_summary(
         {
@@ -182,14 +240,21 @@ def _suite_run_record(
     return {
         "run_id": result.run_id,
         "algorithm": result.algorithm,
+        "implementation": metadata.get("implementation"),
         "params": result.params,
         "metrics": result.metrics,
+        "metric_readings": metadata.get("metric_readings"),
+        "geometry_metrics": metadata.get("geometry_metrics"),
         "elapsed_seconds": elapsed_seconds,
         "n_clusters": int(len(set(int(label) for label in labels if label != -1))),
         "n_noise": int((labels == -1).sum()),
         "n_samples": int(len(labels)),
         "evaluation": evaluation,
         "regression": evaluate_canonical_regression(result.algorithm, result.metrics),
+        "geometry_regression": evaluate_geometry_regression(
+            result.algorithm,
+            geometry_reading.get("metrics", {}),
+        ),
         "semantic_profiles": semantic_profiles,
         "comparison_record": comparison_record,
     }

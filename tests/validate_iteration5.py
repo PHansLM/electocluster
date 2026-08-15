@@ -26,23 +26,19 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-EXPECTED_CANONICAL = {
-    "WKMedoids": {
-        "silhouette": 0.10623499888238168,
-        "davies_bouldin": 2.452128159703432,
-        "calinski_harabasz": 94.95935333260046,
-    },
-    "W-Hierarchical Clustering": {
-        "silhouette": 0.14090720223511682,
-        "davies_bouldin": 2.3074104414738756,
-        "calinski_harabasz": 254.6930434573174,
-    },
-    "W-DBSCAN": {
-        "silhouette": 0.29576400377933976,
-        "davies_bouldin": 1.3593183247417573,
-        "calinski_harabasz": 120.30614949115017,
-    },
-}
+
+def _canonical_baselines() -> dict:
+    """Carga la única línea histórica cuando una prueba la necesita."""
+    from src.evaluation.canonical_suite import CANONICAL_METRIC_BASELINES
+
+    return CANONICAL_METRIC_BASELINES
+
+
+def _canonical_geometry_baselines() -> dict:
+    """Carga la línea geométrica independiente cuando una prueba la necesita."""
+    from src.evaluation.canonical_suite import CANONICAL_GEOMETRY_BASELINES
+
+    return CANONICAL_GEOMETRY_BASELINES
 
 
 def main() -> int:
@@ -125,6 +121,12 @@ def run_quick_checks() -> None:
     assert normalized["silhouette"] == normalized["silhouette_score"] == 0.1
     assert ReportGenerator._metric_value(legacy, "davies_bouldin") == 2.0
 
+    print("[quick] Checking implementation nomenclature")
+    _check_implementation_nomenclature()
+
+    print("[quick] Checking additive weighted-geometry metrics")
+    _check_weighted_geometry_metrics()
+
     print("[quick] Checking iteration 5 provenance")
     _check_provenance()
 
@@ -189,13 +191,124 @@ def _check_provenance() -> None:
         assert stored_dataset_sha256({"metadata": {}}) is None
 
 
+def _check_weighted_geometry_metrics() -> None:
+    import numpy as np
+    import pandas as pd
+
+    from src.evaluation.metrics import (
+        calculate_metrics,
+        calculate_weighted_geometry_metrics,
+    )
+
+    class StaticWeightManager:
+        def __init__(self, weights):
+            self.weights = dict(weights)
+
+        def get_weights_array(self, feature_order=None):
+            order = feature_order or list(self.weights)
+            return [self.weights[name] for name in order]
+
+    data = pd.DataFrame(
+        {
+            "x": [0.0, 0.1, 0.2, 5.0, 5.1, 5.2],
+            "y": [0.0, 0.1, 0.2, 5.0, 5.1, 5.2],
+        }
+    )
+    labels = np.array([0, 0, 0, 1, 1, 1])
+    manager = StaticWeightManager({"x": 1.0, "y": 1.0})
+    historical = calculate_metrics(data, labels)
+    geometry = calculate_weighted_geometry_metrics(data, labels, manager)
+
+    for key in ("silhouette", "davies_bouldin", "calinski_harabasz"):
+        assert np.isclose(historical[key], geometry[key]), (
+            f"Weighted geometry with unit weights changed {key}."
+        )
+
+    weighted = calculate_weighted_geometry_metrics(
+        pd.DataFrame(
+            {
+                "x": [0.0, 0.1, 0.2, 5.0, 5.1, 5.2],
+                "y": [0.0, 3.0, 0.2, 5.0, 2.0, 5.1],
+            }
+        ),
+        labels,
+        StaticWeightManager({"x": 1.0, "y": 0.01}),
+    )
+    assert set(weighted) == {"silhouette", "davies_bouldin", "calinski_harabasz"}
+    assert all(np.isfinite(value) for value in weighted.values())
+
+    anisotropic_historical = calculate_metrics(
+        pd.DataFrame(
+            {
+                "x": [0.0, 0.1, 0.2, 5.0, 5.1, 5.2],
+                "y": [0.0, 3.0, 0.2, 5.0, 2.0, 5.1],
+            }
+        ),
+        labels,
+    )
+    assert any(
+        not np.isclose(anisotropic_historical[key], weighted[key])
+        for key in weighted
+    ), "La ponderación anisotrópica no modificó ninguna métrica geométrica."
+
+    invalid_inputs = (
+        (data, labels[:-1], StaticWeightManager({"x": 1.0, "y": 1.0})),
+        (data, labels, StaticWeightManager({"x": -1.0, "y": 1.0})),
+        (data, labels, StaticWeightManager({"x": 0.0, "y": 0.0})),
+        (data.assign(x=np.nan), labels, StaticWeightManager({"x": 1.0, "y": 1.0})),
+        (data, labels, StaticWeightManager({"x": 1.0})),
+    )
+    for invalid_data, invalid_labels, invalid_manager in invalid_inputs:
+        try:
+            calculate_weighted_geometry_metrics(
+                invalid_data,
+                invalid_labels,
+                invalid_manager,
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("La geometría ponderada aceptó una entrada inválida.")
+
+
+def _check_implementation_nomenclature() -> None:
+    from src.evaluation.execution import (
+        ALGORITHM_IMPLEMENTATIONS,
+        ALGORITHMS,
+        describe_algorithm_implementation,
+    )
+
+    assert set(ALGORITHM_IMPLEMENTATIONS) == set(ALGORITHMS)
+    for algorithm in ALGORITHMS:
+        implementation = describe_algorithm_implementation(algorithm)
+        assert implementation["identifier"] == algorithm
+        assert implementation["implementation_name"]
+        assert implementation["weighting_strategy"]
+        assert implementation["method_family"]
+    assert "W-DBSCANR" in describe_algorithm_implementation("W-DBSCAN")[
+        "not_equivalent_to"
+    ]
+    assert "Ward_p" in describe_algorithm_implementation(
+        "W-Hierarchical Clustering"
+    )["not_equivalent_to"]
+    try:
+        describe_algorithm_implementation("unknown")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Se describió un algoritmo no soportado.")
+
+
 def _check_feature_spaces() -> None:
     from src.evaluation.feature_space import (
         ALL_SAMPLES_V1,
         COMMON_PROCESSED_V1,
         DIRECT_WEIGHTED_DISTANCE_V1,
+        HISTORICAL_READING_V1,
         PRECOMPUTED_DISTANCE_V1,
+        WEIGHTED_GEOMETRY_READING_V1,
         build_evaluation_context,
+        build_metric_reading,
     )
 
     context = build_evaluation_context(
@@ -212,6 +325,33 @@ def _check_feature_spaces() -> None:
     assert context["population"]["id"] == ALL_SAMPLES_V1
     assert context["n_evaluated"] == context["n_total"] == 6
     assert context["evaluation_index_sha256"]
+
+    reading = build_metric_reading(
+        reading=HISTORICAL_READING_V1,
+        metric_space=COMMON_PROCESSED_V1,
+        population=ALL_SAMPLES_V1,
+        metrics={"silhouette": 0.1, "davies_bouldin": 2.0, "calinski_harabasz": 3.0},
+        silhouette_definition="euclidean_processed_dataset",
+        coordinate_definition="processed_features",
+        relationship_to_historical="self",
+    )
+    assert reading["reading"] == HISTORICAL_READING_V1
+    assert reading["space"]["id"] == COMMON_PROCESSED_V1
+    assert reading["population"]["id"] == ALL_SAMPLES_V1
+    try:
+        build_metric_reading(
+            reading="unknown",
+            metric_space=COMMON_PROCESSED_V1,
+            population=ALL_SAMPLES_V1,
+            metrics={},
+            silhouette_definition="unknown",
+            coordinate_definition="unknown",
+            relationship_to_historical="unknown",
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Se aceptó una lectura métrica desconocida.")
 
 
 def _check_comparability() -> None:
@@ -288,9 +428,11 @@ def _check_comparability() -> None:
 
 def _check_canonical_suite() -> None:
     from src.evaluation.canonical_suite import (
+        CANONICAL_GEOMETRY_BASELINES,
         CANONICAL_METRIC_BASELINES,
         CANONICAL_SUITE_SCHEMA,
         evaluate_canonical_regression,
+        evaluate_geometry_regression,
     )
     from src.evaluation.results_manager import ResultsManager
 
@@ -298,6 +440,10 @@ def _check_canonical_suite() -> None:
     assert evaluate_canonical_regression("WKMedoids", metrics)["passed"]
     changed = {**metrics, "silhouette": metrics["silhouette"] + 0.01}
     assert not evaluate_canonical_regression("WKMedoids", changed)["passed"]
+    geometry = CANONICAL_GEOMETRY_BASELINES["WKMedoids"]
+    assert evaluate_geometry_regression("WKMedoids", geometry)["passed"]
+    changed_geometry = {**geometry, "silhouette": geometry["silhouette"] + 0.01}
+    assert not evaluate_geometry_regression("WKMedoids", changed_geometry)["passed"]
 
     with tempfile.TemporaryDirectory() as tmpdir:
         manager = ResultsManager(results_path=tmpdir)
@@ -307,10 +453,12 @@ def _check_canonical_suite() -> None:
             "runs": [{"algorithm": "WKMedoids"}],
             "comparability": {"status": "incompatible"},
             "regression": {"all_passed": True},
+            "geometry_regression": {"all_passed": True},
         }, suite_id="suite_test")
         assert suite_id == "suite_test"
         assert manager.load_suite(suite_id)["schema"] == CANONICAL_SUITE_SCHEMA
         assert manager.list_suites()[0]["regression_passed"]
+        assert manager.list_suites()[0]["geometry_regression_passed"]
 
 
 def _check_semantic_profiles() -> None:
@@ -693,7 +841,7 @@ def run_full_checks() -> None:
     from src.evaluation.execution import default_params, run_clustering_experiment
 
     gc.collect()
-    for algorithm, expected in EXPECTED_CANONICAL.items():
+    for algorithm, expected in _canonical_baselines().items():
         print(f"[full] Running {algorithm}")
         try:
             with contextlib.redirect_stdout(io.StringIO()):
@@ -713,6 +861,16 @@ def run_full_checks() -> None:
             assert actual is not None, f"{algorithm} metric {key} is None."
             assert math.isclose(actual, expected_value, rel_tol=1e-8, abs_tol=1e-8), (
                 f"{algorithm} metric {key} changed: expected {expected_value}, got {actual}"
+            )
+        geometry_metrics = result.metadata.get("metric_readings", {}).get(
+            "weighted_geometry", {}
+        ).get("metrics", {})
+        for key, expected_value in _canonical_geometry_baselines()[algorithm].items():
+            actual = geometry_metrics.get(key)
+            assert actual is not None, f"{algorithm} geometry metric {key} is None."
+            assert math.isclose(actual, expected_value, rel_tol=1e-8, abs_tol=1e-8), (
+                f"{algorithm} geometry metric {key} changed: "
+                f"expected {expected_value}, got {actual}"
             )
         del result
         gc.collect()
@@ -735,9 +893,14 @@ def run_sample_checks(sample_size: int) -> None:
         sample_path = Path(tmpdir) / "processed_sample.csv"
         df.to_csv(sample_path, index=False)
 
-        expected_metric_spaces = {
+        expected_historical_metric_spaces = {
             "WKMedoids": "common_processed_v1",
             "W-Hierarchical Clustering": "common_processed_v1",
+            "W-DBSCAN": "weighted_pca_v1",
+        }
+        expected_geometry_metric_spaces = {
+            "WKMedoids": "direct_weighted_distance_v1",
+            "W-Hierarchical Clustering": "direct_weighted_distance_v1",
             "W-DBSCAN": "weighted_pca_v1",
         }
         expected_populations = {
@@ -750,8 +913,23 @@ def run_sample_checks(sample_size: int) -> None:
             suite = run_canonical_suite(dataset_path=str(sample_path), persist=False)
         assert suite.suite_id is None
         assert suite.artifact["schema"] == CANONICAL_SUITE_SCHEMA
-        assert len(suite.artifact["runs"]) == len(EXPECTED_CANONICAL)
+        assert len(suite.artifact["runs"]) == len(_canonical_baselines())
         assert suite.artifact["comparability"]["status"] == "incompatible"
+        from src.evaluation.results_manager import ResultsManager
+
+        temporary_manager = ResultsManager(
+            results_path=Path(tmpdir) / "transient_suite_results"
+        )
+        temporary_suite_id = temporary_manager.save_suite(suite.artifact)
+        restored_suite = temporary_manager.load_suite(temporary_suite_id)
+        assert restored_suite["schema"] == CANONICAL_SUITE_SCHEMA
+        assert restored_suite["geometry_regression"] == suite.artifact[
+            "geometry_regression"
+        ]
+        assert (
+            temporary_manager.list_suites()[0]["geometry_regression_passed"]
+            == suite.artifact["geometry_regression"]["all_passed"]
+        )
         suite_records = {item["algorithm"]: item for item in suite.artifact["runs"]}
         for result in suite.results:
             algorithm = result.algorithm
@@ -762,10 +940,50 @@ def run_sample_checks(sample_size: int) -> None:
             assert provenance.get("dataset", {}).get("rows") == sample_size
             assert provenance.get("dataset", {}).get("feature_order") == df.columns.tolist()
             assert provenance.get("configuration", {}).get("execution_sha256")
+            implementation = result.metadata.get("implementation", {})
+            assert implementation.get("identifier") == algorithm
+            assert implementation.get("implementation_name")
             evaluation_context = result.metadata.get("evaluation_context", {})
-            assert evaluation_context.get("metric_space", {}).get("id") == expected_metric_spaces[algorithm]
+            assert (
+                evaluation_context.get("metric_space", {}).get("id")
+                == expected_historical_metric_spaces[algorithm]
+            )
             assert evaluation_context.get("population", {}).get("id") == expected_populations[algorithm]
+            geometry_metrics = result.metadata.get("geometry_metrics", {})
+            metric_readings = result.metadata.get("metric_readings", {})
+            historical_reading = metric_readings.get("historical", {})
+            geometry_reading = metric_readings.get("weighted_geometry", {})
+            assert historical_reading.get("reading") == "historical"
+            assert geometry_reading.get("reading") == "weighted_geometry"
+            assert historical_reading.get("space", {}).get("id") == (
+                expected_historical_metric_spaces[algorithm]
+            )
+            assert geometry_reading.get("space", {}).get("id") == (
+                expected_geometry_metric_spaces[algorithm]
+            )
+            assert historical_reading.get("population", {}).get("id") == (
+                expected_populations[algorithm]
+            )
+            assert geometry_reading.get("population", {}).get("id") == (
+                expected_populations[algorithm]
+            )
+            assert historical_reading.get("metrics") == result.metrics
+            assert geometry_reading.get("metrics") == geometry_metrics.get("metrics")
+            assert geometry_metrics.get("schema") == "iteration5-geometry-metrics-v1"
+            assert geometry_metrics.get("space") == expected_geometry_metric_spaces[algorithm]
+            assert geometry_metrics.get("population") == expected_populations[algorithm]
+            assert set(geometry_metrics.get("metrics", {})) == {
+                "silhouette",
+                "davies_bouldin",
+                "calinski_harabasz",
+            }
             suite_record = suite_records[algorithm]
+            assert suite_record.get("implementation") == implementation
+            assert suite_record.get("metric_readings") == metric_readings
+            assert "geometry_regression" in suite_record
+            assert suite_record.get("geometry_metrics", {}).get("schema") == (
+                "iteration5-geometry-metrics-v1"
+            )
             assert suite_record["semantic_profiles"]["source"]["algorithm"] == algorithm
             assert "elapsed_seconds" in suite_record
             del result
@@ -792,24 +1010,38 @@ def run_streamlit_checks() -> None:
 
         if page == "src/pages/4_resultados.py":
             tab_labels = [tab.label for tab in app.tabs]
-            assert "Perfiles" not in tab_labels
-            assert "Analisis de perfiles" in tab_labels
+            assert "Perfiles" not in tab_labels, (
+                f"Unexpected legacy tab found. Available tabs: {tab_labels}"
+            )
+            assert "Analisis de perfiles" in tab_labels, (
+                f"Semantic profiles tab missing. Available tabs: {tab_labels}"
+            )
             download_labels = [
                 button.label for button in app.get("download_button")
             ]
             button_labels = [button.label for button in app.button]
-            assert "Descargar perfiles CSV" in download_labels
+            assert "Descargar perfiles CSV" in download_labels, (
+                f"Legacy profiles download missing. Downloads: {download_labels}"
+            )
             assert {
                 "Resumen semantico CSV",
                 "Distribuciones semanticas CSV",
                 "Perfiles semanticos JSON",
             } <= set(download_labels)
-            assert "Guardar figuras exportables" in button_labels
-            assert "Descargar evidencia integrada JSON" not in download_labels
+            assert "Guardar figuras exportables" in button_labels, (
+                f"Figure export button missing. Buttons: {button_labels}"
+            )
+            assert "Descargar evidencia integrada JSON" not in download_labels, (
+                "Deprecated integrated evidence download is still exposed."
+            )
 
             selectboxes = {selectbox.label: selectbox for selectbox in app.selectbox}
-            assert "Cluster del perfil semantico" in selectboxes
-            assert "Tipo de variable del perfil semantico" in selectboxes
+            assert "Cluster del perfil semantico" in selectboxes, (
+                f"Cluster selector missing. Selectors: {list(selectboxes)}"
+            )
+            assert "Tipo de variable del perfil semantico" in selectboxes, (
+                f"Feature-type selector missing. Selectors: {list(selectboxes)}"
+            )
 
             for feature_type in (
                 "categorico_nominal",
@@ -827,10 +1059,16 @@ def run_streamlit_checks() -> None:
                     f"{app.exception}"
                 )
                 updated_labels = [selectbox.label for selectbox in app.selectbox]
-                assert "Variable para inspeccionar su distribucion" in updated_labels
+                assert "Variable para inspeccionar su distribucion" in updated_labels, (
+                    f"Distribution selector missing for {feature_type}. "
+                    f"Selectors: {updated_labels}"
+                )
 
                 if feature_type == "categorico_nominal":
-                    assert any("leng1" in warning.value for warning in app.warning)
+                    assert any("leng1" in warning.value for warning in app.warning), (
+                        "Expected semantic warning for leng1 was not rendered. "
+                        f"Warnings: {[warning.value for warning in app.warning]}"
+                    )
                     semantic_summary = next(
                         dataframe.value
                         for dataframe in app.dataframe
@@ -847,19 +1085,28 @@ def run_streamlit_checks() -> None:
                     ):
                         assert semantic_summary[column].map(
                             lambda value: value == "N/A" or str(value).endswith("%")
-                        ).all()
+                        ).all(), (
+                            f"Invalid percentage formatting in summary column {column}: "
+                            f"{semantic_summary[column].tolist()}"
+                        )
                     for column in (
                         "porcentaje del cluster",
                         "porcentaje total",
                     ):
                         assert semantic_distribution[column].map(
                             lambda value: value == "N/A" or str(value).endswith("%")
-                        ).all()
+                        ).all(), (
+                            f"Invalid percentage formatting in distribution column {column}: "
+                            f"{semantic_distribution[column].tolist()}"
+                        )
                     assert semantic_distribution[
                         "diferencia en puntos porcentuales"
                     ].map(
                         lambda value: value == "N/A" or str(value).endswith(" pp")
-                    ).all()
+                    ).all(), (
+                        "Invalid percentage-point formatting: "
+                        f"{semantic_distribution['diferencia en puntos porcentuales'].tolist()}"
+                    )
 
 
 if __name__ == "__main__":

@@ -9,7 +9,8 @@ import numpy as np
 from sklearn.metrics import (
     silhouette_score,
     davies_bouldin_score,
-    calinski_harabasz_score
+    calinski_harabasz_score,
+    pairwise_distances,
 )
 from typing import Dict, Any, Optional
 import warnings
@@ -101,11 +102,11 @@ class ClusteringMetrics:
         """
         try:
             score = silhouette_score(X, labels, metric=metric)
-            print(f"  ✓ Silhouette Score: {score:.4f}")
-            return float(score)
-        except Exception as e:
+        except ValueError as e:
             warnings.warn(f"Error calculando Silhouette: {e}")
             return np.nan
+        print(f"  [OK] Silhouette Score: {score:.4f}")
+        return float(score)
     
     def davies_bouldin(
         self,
@@ -128,11 +129,11 @@ class ClusteringMetrics:
         """
         try:
             score = davies_bouldin_score(X, labels)
-            print(f"  ✓ Davies-Bouldin Index: {score:.4f}")
-            return float(score)
-        except Exception as e:
+        except ValueError as e:
             warnings.warn(f"Error calculando Davies-Bouldin: {e}")
             return np.nan
+        print(f"  [OK] Davies-Bouldin Index: {score:.4f}")
+        return float(score)
     
     def calinski_harabasz(
         self,
@@ -155,11 +156,11 @@ class ClusteringMetrics:
         """
         try:
             score = calinski_harabasz_score(X, labels)
-            print(f"  ✓ Calinski-Harabasz Index: {score:.4f}")
-            return float(score)
-        except Exception as e:
+        except ValueError as e:
             warnings.warn(f"Error calculando Calinski-Harabasz: {e}")
             return np.nan
+        print(f"  [OK] Calinski-Harabasz Index: {score:.4f}")
+        return float(score)
     
     def _validate_inputs(self, X: np.ndarray, labels: np.ndarray):
         """
@@ -355,6 +356,66 @@ def calculate_metrics(
     """
     evaluator = ClusteringMetrics()
     return evaluator.calculate_all(X, labels, metric)
+
+
+def calculate_weighted_geometry_metrics(
+    X: pd.DataFrame,
+    labels: np.ndarray,
+    weight_manager: WeightManager,
+) -> Dict[str, float]:
+    """Calcula metricas en la geometria ponderada usada por WK/WH.
+
+    La distancia de los algoritmos ponderados es
+    ``sqrt(sum(w_i * (x_i - y_i)^2))``. Para Silhouette se utiliza la
+    matriz de distancias exacta; Davies-Bouldin y Calinski-Harabasz se
+    calculan sobre la representacion euclidiana equivalente ``X * sqrt(w)``.
+
+    Esta funcion es complementaria a ``calculate_metrics`` y no reemplaza
+    las metricas historicas calculadas sobre el espacio procesado comun.
+    """
+    X_array = X.to_numpy(dtype=float) if isinstance(X, pd.DataFrame) else np.asarray(X, dtype=float)
+    labels = np.asarray(labels)
+    try:
+        weights = np.asarray(
+            weight_manager.get_weights_array(
+                feature_order=X.columns.tolist() if isinstance(X, pd.DataFrame) else None
+            ),
+            dtype=float,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("No se pudieron alinear los pesos con las columnas de X.") from exc
+
+    if X_array.ndim != 2 or len(X_array) != len(labels):
+        raise ValueError("X y labels deben tener dimensiones compatibles.")
+    if weights.ndim != 1 or weights.size != X_array.shape[1]:
+        raise ValueError("La cantidad de pesos debe coincidir con las columnas de X.")
+    if not np.all(np.isfinite(X_array)) or not np.all(np.isfinite(weights)):
+        raise ValueError("X y los pesos deben contener valores finitos.")
+    if np.any(weights < 0) or not np.any(weights > 0):
+        raise ValueError("Los pesos deben ser no negativos y al menos uno debe ser positivo.")
+
+    unique_labels = np.unique(labels)
+    if len(unique_labels) < 2 or len(unique_labels) >= len(labels):
+        raise ValueError("Se requieren entre 2 y n-1 clusters para calcular metricas.")
+
+    # ||(x - y) * sqrt(w)||_2 es exactamente la distancia ponderada utilizada
+    # por WKMedoids y el aglomerativo ponderado. Se evita construir un tensor
+    # n x n x d, cuya memoria crece mucho más que la matriz necesaria para
+    # Silhouette.
+    weighted_coordinates = X_array * np.sqrt(weights)
+    distance_matrix = pairwise_distances(weighted_coordinates, metric="euclidean")
+
+    return {
+        "silhouette": float(
+            silhouette_score(distance_matrix, labels, metric="precomputed")
+        ),
+        "davies_bouldin": float(
+            davies_bouldin_score(weighted_coordinates, labels)
+        ),
+        "calinski_harabasz": float(
+            calinski_harabasz_score(weighted_coordinates, labels)
+        ),
+    }
 
 def calculate_metrics_weighted(
     X: pd.DataFrame,

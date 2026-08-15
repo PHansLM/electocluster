@@ -8,6 +8,11 @@ import json
 
 EVALUATION_CONTEXT_SCHEMA = "iteration5-evaluation-context-v1"
 INTERNAL_METRICS_V1 = "sklearn_internal_metrics_v1"
+METRIC_READING_SCHEMA = "iteration5-metric-reading-v1"
+GEOMETRY_METRICS_SCHEMA = "iteration5-geometry-metrics-v1"
+
+HISTORICAL_READING_V1 = "historical"
+WEIGHTED_GEOMETRY_READING_V1 = "weighted_geometry"
 
 COMMON_PROCESSED_V1 = "common_processed_v1"
 DIRECT_WEIGHTED_DISTANCE_V1 = "direct_weighted_distance_v1"
@@ -100,6 +105,35 @@ def build_evaluation_context(
         "n_total": n_total,
         "n_evaluated": n_evaluated,
         "evaluation_index_sha256": _sequence_sha256(evaluated_indices),
+    }
+
+
+def build_metric_reading(
+    *,
+    reading: str,
+    metric_space: str,
+    population: str,
+    metrics: dict,
+    silhouette_definition: str,
+    coordinate_definition: str,
+    relationship_to_historical: str,
+) -> dict:
+    """Describe una lectura de métricas sin mezclarla con otra geometría."""
+    if reading not in {HISTORICAL_READING_V1, WEIGHTED_GEOMETRY_READING_V1}:
+        raise ValueError(f"Lectura de métricas desconocida: {reading}")
+    return {
+        "schema": METRIC_READING_SCHEMA,
+        "reading": reading,
+        "space": describe_feature_space(metric_space),
+        "population": describe_evaluation_population(population),
+        "metric_definition": {
+            "id": INTERNAL_METRICS_V1,
+            "metrics": ["silhouette", "davies_bouldin", "calinski_harabasz"],
+        },
+        "metrics": dict(metrics),
+        "silhouette_definition": silhouette_definition,
+        "coordinate_definition": coordinate_definition,
+        "relationship_to_historical": relationship_to_historical,
     }
 
 
