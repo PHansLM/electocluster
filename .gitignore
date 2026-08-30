@@ -7,6 +7,7 @@ __pycache__/
 venv_clustering/
 venv/
 .venv/
+.venv311/
 env/
 ENV/
 venv*/
@@ -37,7 +38,8 @@ data/synthetic/*
 !data/synthetic/README.md
 data/uploads/*
 !data/uploads/README.md
-results/
+results/*
+!results/README.md
 
 # Environment files
 .env

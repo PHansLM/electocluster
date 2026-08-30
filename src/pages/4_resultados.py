@@ -36,6 +36,7 @@ from src.visualization import (
     interpret_feature_value,
     pca_projection,
     save_run_figures,
+    semantic_profile_heatmap,
     top_distinctive_features,
 )
 
@@ -531,6 +532,7 @@ semantic_profiles = cluster_semantic_profiles(df, labels)
     tab_deviation,
     tab_distances,
     tab_dimensions,
+    tab_heatmap,
     tab_projection,
     tab_compare,
 ) = st.tabs(
@@ -540,6 +542,7 @@ semantic_profiles = cluster_semantic_profiles(df, labels)
         "Diferencias",
         "Distancias",
         "Dimensiones",
+        "Heatmap semantico",
         "PCA 2D",
         "Comparacion",
     ]
@@ -602,6 +605,49 @@ with tab_projection:
         title="Proyeccion PCA 2D de clusters",
     )
     st.plotly_chart(fig_projection, use_container_width=True)
+
+with tab_heatmap:
+    st.markdown("#### Heatmap semantico de perfiles")
+    st.caption(
+        "Las columnas muestran las variables con mayor diferenciacion relativa entre "
+        "clusters. El color expresa desviacion frente al total analizado dentro de "
+        "cada variable; no representa promedios de codigos nominales."
+    )
+    heatmap = semantic_profile_heatmap(semantic_profiles, top_n=10)
+    if heatmap.matrix.empty:
+        st.warning("No hay suficientes perfiles semanticamente comparables para el heatmap.")
+    else:
+        heatmap_labels = dict(zip(
+            heatmap.features["feature_code"], heatmap.features["feature_name"]
+        ))
+        display_matrix = heatmap.matrix.rename(columns=heatmap_labels)
+        fig_heatmap = px.imshow(
+            display_matrix,
+            color_continuous_scale="RdBu",
+            zmin=-1,
+            zmax=1,
+            aspect="auto",
+            labels={"x": "Variable", "y": "Cluster", "color": "Desviacion relativa"},
+            title="Perfiles multidimensionales: desviacion relativa por variable",
+        )
+        st.plotly_chart(fig_heatmap, use_container_width=True)
+        st.dataframe(
+            heatmap.features.rename(columns={
+                "feature_code": "codigo",
+                "feature_name": "variable",
+                "feature_type": "tipo",
+                "relative_dispersion": "dispersion relativa",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
+        if heatmap.excluded_nominal_features:
+            st.info(
+                "Las variables nominales se excluyen del heatmap porque sus codigos "
+                "no constituyen una escala numerica: "
+                + ", ".join(f"`{feature}`" for feature in heatmap.excluded_nominal_features),
+                icon=":material/info:",
+            )
 
 with tab_profile_analysis:
     st.markdown("#### Estadisticas segun el tipo de variable")

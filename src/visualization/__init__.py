@@ -20,6 +20,7 @@ from .profile_interpreter import (
     feature_display_name,
     interpret_feature_value,
 )
+from .high_dimensional import SemanticHeatmapData, semantic_profile_heatmap
 from .semantic_profiles import (
     DISTRIBUTION_COLUMNS,
     SEMANTIC_PROFILE_EXPORT_SCHEMA,
@@ -34,6 +35,7 @@ __all__ = [
     "EXPLANATORY_DIMENSIONS",
     "PROFILE_METADATA_COLUMNS",
     "SEMANTIC_PROFILE_EXPORT_SCHEMA",
+    "SemanticHeatmapData",
     "SUMMARY_COLUMNS",
     "SemanticProfileTables",
     "build_semantic_profile_export",
@@ -47,5 +49,6 @@ __all__ = [
     "interpret_feature_value",
     "pca_projection",
     "save_run_figures",
+    "semantic_profile_heatmap",
     "top_distinctive_features",
 ]

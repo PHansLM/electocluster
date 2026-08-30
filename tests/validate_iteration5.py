@@ -91,6 +91,7 @@ def run_quick_checks() -> None:
         "src.evaluation.results_manager",
         "src.evaluation.report_generator",
         "src.visualization.clustering_plots",
+        "src.visualization.high_dimensional",
         "src.visualization.semantic_profiles",
     ]
     for module in modules:
@@ -472,6 +473,7 @@ def _check_semantic_profiles() -> None:
         build_semantic_profile_export,
         cluster_semantic_profiles,
     )
+    from src.visualization.high_dimensional import semantic_profile_heatmap
 
     df = pd.DataFrame(
         {
@@ -519,6 +521,14 @@ def _check_semantic_profiles() -> None:
     assert_frame_equal(legacy_after, legacy_before)
     assert set(semantic.summaries["cluster_id"]) == {0, 1}
     assert -1 not in set(semantic.summaries["cluster_id"])
+
+    heatmap = semantic_profile_heatmap(semantic, top_n=10)
+    assert set(heatmap.matrix.columns) == {"numeric", "ordinal", "binary"}
+    assert list(heatmap.matrix.index) == ["Cluster 0", "Cluster 1"]
+    assert "nominal" in heatmap.excluded_nominal_features
+    assert "ambiguous" in heatmap.excluded_nominal_features
+    assert np.isfinite(heatmap.matrix.to_numpy(dtype=float)).all()
+    assert (heatmap.matrix.abs().to_numpy(dtype=float) <= 1.0).all()
 
     def summary(cluster_id: int, feature_code: str):
         matches = semantic.summaries[
