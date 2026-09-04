@@ -1,0 +1,243 @@
+{
+  "run_id": "wdbscan_20260903_212428_995836",
+  "algorithm": "W-DBSCAN",
+  "timestamp": "2026-09-03T21:24:28.995836",
+  "params": {
+    "eps": 0.606,
+    "min_samples": 34,
+    "pca_components": 17
+  },
+  "weights_snapshot": {
+    "edre": 1.0,
+    "q10inc": 1.0,
+    "etid": 0.75,
+    "boletidnew": 0.7,
+    "boletidnewb": 0.7,
+    "estratopri": 0.85,
+    "ur": 0.9,
+    "ocupoit": 0.95,
+    "q2": 0.65,
+    "q1tc_r": 0.5,
+    "q3cn": 0.7,
+    "q5b": 0.7,
+    "r3": 0.65,
+    "r4a": 0.65,
+    "r6": 0.65,
+    "r7": 0.65,
+    "r12": 0.65,
+    "r15": 0.65,
+    "r18n": 0.65,
+    "r18": 0.65,
+    "r16": 0.65,
+    "r27": 0.65,
+    "leng1": 0.65,
+    "formal": 0.65,
+    "wf1": 0.65,
+    "bolcct1a": 0.65,
+    "bolcct1b": 0.65,
+    "bolcct1c": 0.65,
+    "estratosec": 0.6,
+    "q12cn": 0.5,
+    "q12bn": 0.6,
+    "wealth_index": 0.8,
+    "gi0n": 0.55,
+    "smedia3n": 0.55,
+    "cp6": 0.5,
+    "cp7": 0.5,
+    "cp8": 0.5,
+    "cp13": 0.5,
+    "q10e": 0.5,
+    "q11n": 0.55,
+    "leng4": 0.5,
+    "civic_index": 0.5
+  },
+  "metrics": {
+    "silhouette": 0.29576400377933976,
+    "davies_bouldin": 1.3593183247417573,
+    "calinski_harabasz": 120.30614949115017,
+    "silhouette_score": 0.29576400377933976,
+    "davies_bouldin_score": 1.3593183247417573,
+    "calinski_harabasz_score": 120.30614949115017
+  },
+  "n_clusters": 4,
+  "n_noise": 1410,
+  "n_samples": 1706,
+  "metadata": {
+    "evaluation_space": "weighted_pca_without_noise",
+    "excluded_noise": true,
+    "n_evaluated": 296,
+    "pca_components": 17,
+    "pca_explained_variance": 0.9050775435926351,
+    "n_noise": 1410,
+    "noise_percentage": 82.64947245017585,
+    "metric_readings": {
+      "historical": {
+        "schema": "iteration5-metric-reading-v1",
+        "reading": "historical",
+        "space": {
+          "id": "weighted_pca_v1",
+          "label": "PCA ponderado historico",
+          "description": "PCA aplicado despues de la transformacion historica X * weights."
+        },
+        "population": {
+          "id": "clustered_samples_without_noise_v1",
+          "label": "Observaciones agrupadas sin ruido",
+          "description": "Las metricas excluyen las observaciones etiquetadas como ruido (-1)."
+        },
+        "metric_definition": {
+          "id": "sklearn_internal_metrics_v1",
+          "metrics": [
+            "silhouette",
+            "davies_bouldin",
+            "calinski_harabasz"
+          ]
+        },
+        "metrics": {
+          "silhouette": 0.29576400377933976,
+          "davies_bouldin": 1.3593183247417573,
+          "calinski_harabasz": 120.30614949115017
+        },
+        "silhouette_definition": "euclidean_weighted_pca",
+        "coordinate_definition": "historical_weighted_features_then_pca",
+        "relationship_to_historical": "self"
+      },
+      "weighted_geometry": {
+        "schema": "iteration5-metric-reading-v1",
+        "reading": "weighted_geometry",
+        "space": {
+          "id": "weighted_pca_v1",
+          "label": "PCA ponderado historico",
+          "description": "PCA aplicado despues de la transformacion historica X * weights."
+        },
+        "population": {
+          "id": "clustered_samples_without_noise_v1",
+          "label": "Observaciones agrupadas sin ruido",
+          "description": "Las metricas excluyen las observaciones etiquetadas como ruido (-1)."
+        },
+        "metric_definition": {
+          "id": "sklearn_internal_metrics_v1",
+          "metrics": [
+            "silhouette",
+            "davies_bouldin",
+            "calinski_harabasz"
+          ]
+        },
+        "metrics": {
+          "silhouette": 0.29576400377933976,
+          "davies_bouldin": 1.3593183247417573,
+          "calinski_harabasz": 120.30614949115017
+        },
+        "silhouette_definition": "euclidean_weighted_pca",
+        "coordinate_definition": "historical_weighted_features_then_pca",
+        "relationship_to_historical": "identical_space_and_population"
+      }
+    },
+    "geometry_metrics": {
+      "schema": "iteration5-geometry-metrics-v1",
+      "space": "weighted_pca_v1",
+      "population": "clustered_samples_without_noise_v1",
+      "metrics": {
+        "silhouette": 0.29576400377933976,
+        "davies_bouldin": 1.3593183247417573,
+        "calinski_harabasz": 120.30614949115017
+      },
+      "silhouette_definition": "euclidean_weighted_pca",
+      "coordinate_definition": "historical_weighted_features_then_pca"
+    },
+    "evaluation_context": {
+      "schema": "iteration5-evaluation-context-v1",
+      "clustering_space": {
+        "id": "weighted_pca_v1",
+        "label": "PCA ponderado historico",
+        "description": "PCA aplicado despues de la transformacion historica X * weights."
+      },
+      "model_input_space": {
+        "id": "precomputed_distance_v1",
+        "label": "Matriz de distancias precomputada",
+        "description": "Entrada cuadrada entregada al algoritmo con metric='precomputed'."
+      },
+      "metric_space": {
+        "id": "weighted_pca_v1",
+        "label": "PCA ponderado historico",
+        "description": "PCA aplicado despues de la transformacion historica X * weights."
+      },
+      "population": {
+        "id": "clustered_samples_without_noise_v1",
+        "label": "Observaciones agrupadas sin ruido",
+        "description": "Las metricas excluyen las observaciones etiquetadas como ruido (-1)."
+      },
+      "metric_definition": {
+        "id": "sklearn_internal_metrics_v1",
+        "metrics": [
+          "silhouette",
+          "davies_bouldin",
+          "calinski_harabasz"
+        ]
+      },
+      "n_total": 1706,
+      "n_evaluated": 296,
+      "evaluation_index_sha256": "14362e3c62fd88a21876214b14f3fa2751390c73bfe47862f06b35ad516e3b27"
+    },
+    "implementation": {
+      "identifier": "W-DBSCAN",
+      "implementation_name": "DBSCAN sobre PCA de variables ponderadas (pipeline histórico)",
+      "weighting_strategy": "Transformación histórica X * weights, PCA y distancia euclidiana precomputada sobre las componentes.",
+      "method_family": "clustering basado en densidad",
+      "not_equivalent_to": [
+        "W-DBSCANR"
+      ]
+    },
+    "provenance": {
+      "schema": "iteration5-provenance-v1",
+      "dataset": {
+        "path": "data/processed/lapop_bolivia_2023_processed.csv",
+        "sha256": "a06b8bb09009b7ac1f1da8817fea11a9b63f0fdde3bab06a1485594faeb8d3dc",
+        "rows": 1706,
+        "columns": 28,
+        "feature_order": [
+          "edre",
+          "q10inc",
+          "etid",
+          "boletidnew",
+          "boletidnewb",
+          "estratopri",
+          "ur",
+          "ocupoit",
+          "q2",
+          "q1tc_r",
+          "q3cn",
+          "q5b",
+          "leng1",
+          "formal",
+          "wf1",
+          "bolcct1a",
+          "bolcct1b",
+          "bolcct1c",
+          "estratosec",
+          "q12cn",
+          "q12bn",
+          "gi0n",
+          "smedia3n",
+          "q10e",
+          "q11n",
+          "leng4",
+          "wealth_index",
+          "civic_index"
+        ],
+        "feature_order_sha256": "d16946123069ab6969d5ad908eb4765a595ad8b7f479fe0a03b46b9b7b462df8"
+      },
+      "code": {
+        "git_commit": "2df88945c789e2a2cb99881e14bbf29aec8e3c97",
+        "git_dirty": false
+      },
+      "environment": {
+        "python": "3.11.9"
+      },
+      "configuration": {
+        "params_sha256": "f26b8ac9cf906ef2421f4f33eb328e0bd0481bc94d0d3ac4708928af5a34a808",
+        "weights_sha256": "9bc28ad819967ffba752426ad72a5f037d4f774c02cbd8f15c8ee2bb83726394",
+        "execution_sha256": "c316536ba04dd5f68437569ac52c6467631f8bbc597c8d2a6ec87810fe4c61d1"
+      }
+    }
+  }
+}

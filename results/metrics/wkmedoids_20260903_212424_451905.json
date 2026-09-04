@@ -1,0 +1,237 @@
+{
+  "run_id": "wkmedoids_20260903_212424_451905",
+  "algorithm": "WKMedoids",
+  "timestamp": "2026-09-03T21:24:24.451905",
+  "params": {
+    "n_clusters": 13,
+    "random_state": 42
+  },
+  "weights_snapshot": {
+    "edre": 1.0,
+    "q10inc": 1.0,
+    "etid": 0.75,
+    "boletidnew": 0.7,
+    "boletidnewb": 0.7,
+    "estratopri": 0.85,
+    "ur": 0.9,
+    "ocupoit": 0.95,
+    "q2": 0.65,
+    "q1tc_r": 0.5,
+    "q3cn": 0.7,
+    "q5b": 0.7,
+    "r3": 0.65,
+    "r4a": 0.65,
+    "r6": 0.65,
+    "r7": 0.65,
+    "r12": 0.65,
+    "r15": 0.65,
+    "r18n": 0.65,
+    "r18": 0.65,
+    "r16": 0.65,
+    "r27": 0.65,
+    "leng1": 0.65,
+    "formal": 0.65,
+    "wf1": 0.65,
+    "bolcct1a": 0.65,
+    "bolcct1b": 0.65,
+    "bolcct1c": 0.65,
+    "estratosec": 0.6,
+    "q12cn": 0.5,
+    "q12bn": 0.6,
+    "wealth_index": 0.8,
+    "gi0n": 0.55,
+    "smedia3n": 0.55,
+    "cp6": 0.5,
+    "cp7": 0.5,
+    "cp8": 0.5,
+    "cp13": 0.5,
+    "q10e": 0.5,
+    "q11n": 0.55,
+    "leng4": 0.5,
+    "civic_index": 0.5
+  },
+  "metrics": {
+    "silhouette": 0.10623499888238168,
+    "davies_bouldin": 2.452128159703432,
+    "calinski_harabasz": 94.95935333260046,
+    "silhouette_score": 0.10623499888238168,
+    "davies_bouldin_score": 2.452128159703432,
+    "calinski_harabasz_score": 94.95935333260046
+  },
+  "n_clusters": 13,
+  "n_noise": 0,
+  "n_samples": 1706,
+  "metadata": {
+    "evaluation_space": "processed_dataset",
+    "excluded_noise": false,
+    "n_evaluated": 1706,
+    "inertia": 1906.7922691796887,
+    "metric_readings": {
+      "historical": {
+        "schema": "iteration5-metric-reading-v1",
+        "reading": "historical",
+        "space": {
+          "id": "common_processed_v1",
+          "label": "Dataset procesado comun",
+          "description": "Matriz numerica de 28 variables producida por el preprocesamiento historico."
+        },
+        "population": {
+          "id": "all_samples_v1",
+          "label": "Todas las observaciones",
+          "description": "Las metricas se calculan sobre todas las etiquetas producidas."
+        },
+        "metric_definition": {
+          "id": "sklearn_internal_metrics_v1",
+          "metrics": [
+            "silhouette",
+            "davies_bouldin",
+            "calinski_harabasz"
+          ]
+        },
+        "metrics": {
+          "silhouette": 0.10623499888238168,
+          "davies_bouldin": 2.452128159703432,
+          "calinski_harabasz": 94.95935333260046
+        },
+        "silhouette_definition": "euclidean_processed_dataset",
+        "coordinate_definition": "processed_features",
+        "relationship_to_historical": "self"
+      },
+      "weighted_geometry": {
+        "schema": "iteration5-metric-reading-v1",
+        "reading": "weighted_geometry",
+        "space": {
+          "id": "direct_weighted_distance_v1",
+          "label": "Distancia ponderada directa",
+          "description": "sqrt(sum(w_i * (x_i - y_i)^2)), sin transformar el dataset base."
+        },
+        "population": {
+          "id": "all_samples_v1",
+          "label": "Todas las observaciones",
+          "description": "Las metricas se calculan sobre todas las etiquetas producidas."
+        },
+        "metric_definition": {
+          "id": "sklearn_internal_metrics_v1",
+          "metrics": [
+            "silhouette",
+            "davies_bouldin",
+            "calinski_harabasz"
+          ]
+        },
+        "metrics": {
+          "silhouette": 0.10660470136607983,
+          "davies_bouldin": 2.4834680633648007,
+          "calinski_harabasz": 99.85805003962231
+        },
+        "silhouette_definition": "precomputed_weighted_distance",
+        "coordinate_definition": "processed_features_times_sqrt_weights",
+        "relationship_to_historical": "distinct_weighted_geometry"
+      }
+    },
+    "geometry_metrics": {
+      "schema": "iteration5-geometry-metrics-v1",
+      "space": "direct_weighted_distance_v1",
+      "population": "all_samples_v1",
+      "metrics": {
+        "silhouette": 0.10660470136607983,
+        "davies_bouldin": 2.4834680633648007,
+        "calinski_harabasz": 99.85805003962231
+      },
+      "silhouette_definition": "precomputed_weighted_distance",
+      "coordinate_definition": "processed_features_times_sqrt_weights"
+    },
+    "evaluation_context": {
+      "schema": "iteration5-evaluation-context-v1",
+      "clustering_space": {
+        "id": "direct_weighted_distance_v1",
+        "label": "Distancia ponderada directa",
+        "description": "sqrt(sum(w_i * (x_i - y_i)^2)), sin transformar el dataset base."
+      },
+      "model_input_space": {
+        "id": "precomputed_distance_v1",
+        "label": "Matriz de distancias precomputada",
+        "description": "Entrada cuadrada entregada al algoritmo con metric='precomputed'."
+      },
+      "metric_space": {
+        "id": "common_processed_v1",
+        "label": "Dataset procesado comun",
+        "description": "Matriz numerica de 28 variables producida por el preprocesamiento historico."
+      },
+      "population": {
+        "id": "all_samples_v1",
+        "label": "Todas las observaciones",
+        "description": "Las metricas se calculan sobre todas las etiquetas producidas."
+      },
+      "metric_definition": {
+        "id": "sklearn_internal_metrics_v1",
+        "metrics": [
+          "silhouette",
+          "davies_bouldin",
+          "calinski_harabasz"
+        ]
+      },
+      "n_total": 1706,
+      "n_evaluated": 1706,
+      "evaluation_index_sha256": "eca5d944b494d58ba0b754d48d24a8d1899ada546df9e4fc39faa651fd3a8d9a"
+    },
+    "implementation": {
+      "identifier": "WKMedoids",
+      "implementation_name": "K-Medoids con distancia euclidiana global ponderada",
+      "weighting_strategy": "Distancia precomputada sqrt(sum(w_i * (x_i - y_i)^2)) sobre las variables procesadas.",
+      "method_family": "particional basado en medoides",
+      "not_equivalent_to": []
+    },
+    "provenance": {
+      "schema": "iteration5-provenance-v1",
+      "dataset": {
+        "path": "data/processed/lapop_bolivia_2023_processed.csv",
+        "sha256": "a06b8bb09009b7ac1f1da8817fea11a9b63f0fdde3bab06a1485594faeb8d3dc",
+        "rows": 1706,
+        "columns": 28,
+        "feature_order": [
+          "edre",
+          "q10inc",
+          "etid",
+          "boletidnew",
+          "boletidnewb",
+          "estratopri",
+          "ur",
+          "ocupoit",
+          "q2",
+          "q1tc_r",
+          "q3cn",
+          "q5b",
+          "leng1",
+          "formal",
+          "wf1",
+          "bolcct1a",
+          "bolcct1b",
+          "bolcct1c",
+          "estratosec",
+          "q12cn",
+          "q12bn",
+          "gi0n",
+          "smedia3n",
+          "q10e",
+          "q11n",
+          "leng4",
+          "wealth_index",
+          "civic_index"
+        ],
+        "feature_order_sha256": "d16946123069ab6969d5ad908eb4765a595ad8b7f479fe0a03b46b9b7b462df8"
+      },
+      "code": {
+        "git_commit": "2df88945c789e2a2cb99881e14bbf29aec8e3c97",
+        "git_dirty": false
+      },
+      "environment": {
+        "python": "3.11.9"
+      },
+      "configuration": {
+        "params_sha256": "16648b97afb06a862e5959de912d8901f476cfacaf6a203b96dec216985378cf",
+        "weights_sha256": "9bc28ad819967ffba752426ad72a5f037d4f774c02cbd8f15c8ee2bb83726394",
+        "execution_sha256": "6b88f223d62c8e8348f8e1381d426f3389ca18f816849cc28770725953fb01ba"
+      }
+    }
+  }
+}

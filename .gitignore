@@ -40,6 +40,19 @@ data/uploads/*
 !data/uploads/README.md
 results/*
 !results/README.md
+!results/suites/
+results/suites/*
+!results/suites/canonical_suite_20260903_212407_395427.json
+!results/metrics/
+results/metrics/*
+!results/metrics/wkmedoids_20260903_212424_451905.json
+!results/metrics/whierarchical_clustering_20260903_212427_597150.json
+!results/metrics/wdbscan_20260903_212428_995836.json
+!results/assignments/
+results/assignments/*
+!results/assignments/wkmedoids_20260903_212424_451905.csv
+!results/assignments/whierarchical_clustering_20260903_212427_597150.csv
+!results/assignments/wdbscan_20260903_212428_995836.csv
 
 # Environment files
 .env
