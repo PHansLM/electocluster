@@ -23,12 +23,14 @@ from src.evaluation.provenance import sha256_file, stored_dataset_sha256
 from src.evaluation.report_generator import ReportGenerator
 from src.evaluation.results_manager import RESULTS_PATH, ResultsManager
 from src.utils.constants import PROCESSED_DATA_PATH
+from src.visualization.profile_differences import (
+    PLOT_CONFIG_ES, difference_heatmap, profile_difference_rows,
+)
 from src.visualization import (
     PROFILE_METADATA_COLUMNS,
     build_semantic_profile_export,
     cluster_dimension_scores,
     cluster_distribution,
-    cluster_profile_deviation,
     cluster_profile_distance_matrix,
     cluster_profiles,
     cluster_semantic_profiles,
@@ -37,7 +39,6 @@ from src.visualization import (
     pca_projection,
     save_run_figures,
     semantic_profile_heatmap,
-    top_distinctive_features,
 )
 
 
@@ -520,8 +521,6 @@ with st.expander("Parametros, pesos y metadata", expanded=False):
 distribution = cluster_distribution(labels)
 profiles = cluster_profiles(df, labels)
 projection = pca_projection(df, labels)
-profile_deviations = cluster_profile_deviation(df, labels)
-top_features = top_distinctive_features(df, labels, top_n=5)
 profile_distances = cluster_profile_distance_matrix(df, labels)
 dimension_scores = cluster_dimension_scores(df, labels)
 semantic_profiles = cluster_semantic_profiles(df, labels)
@@ -542,7 +541,7 @@ semantic_profiles = cluster_semantic_profiles(df, labels)
         "Diferencias",
         "Distancias",
         "Dimensiones",
-        "Heatmap semantico",
+        "Heatmap semántico",
         "PCA 2D",
         "Comparacion",
     ]
@@ -607,47 +606,72 @@ with tab_projection:
     st.plotly_chart(fig_projection, use_container_width=True)
 
 with tab_heatmap:
-    st.markdown("#### Heatmap semantico de perfiles")
-    st.caption(
-        "Las columnas muestran las variables con mayor diferenciacion relativa entre "
-        "clusters. El color expresa desviacion frente al total analizado dentro de "
-        "cada variable; no representa promedios de codigos nominales."
+    st.markdown("#### ¿En qué características destaca cada grupo?")
+    st.write(
+        "Este mapa de colores permite reconocer el perfil de cada grupo de un vistazo. "
+        "Cada fila es una característica y cada columna es un grupo. La referencia es "
+        "el conjunto de personas asignadas a grupos; las observaciones de ruido quedan fuera."
+    )
+    st.info(
+        "Rojo: por encima de la referencia · Azul: por debajo · Blanco: cerca de ella. "
+        "Lee una fila de izquierda a derecha para comparar los grupos. "
+        "Estos colores no significan mejor o peor."
     )
     heatmap = semantic_profile_heatmap(semantic_profiles, top_n=10)
     if heatmap.matrix.empty:
         st.warning("No hay suficientes perfiles semanticamente comparables para el heatmap.")
     else:
-        heatmap_labels = dict(zip(
-            heatmap.features["feature_code"], heatmap.features["feature_name"]
-        ))
-        display_matrix = heatmap.matrix.rename(columns=heatmap_labels)
-        fig_heatmap = px.imshow(
-            display_matrix,
-            color_continuous_scale="RdBu",
-            zmin=-1,
-            zmax=1,
-            aspect="auto",
-            labels={"x": "Variable", "y": "Cluster", "color": "Desviacion relativa"},
-            title="Perfiles multidimensionales: desviacion relativa por variable",
+        st.write(
+            "**Atención a la intensidad:** se ajusta por separado en cada fila para destacar "
+            "sus diferencias. Dos celdas de rojo intenso en filas distintas no implican "
+            "diferencias del mismo tamaño. Para ver cuánto cambia realmente, pasa el cursor "
+            "por una celda o consulta la explicación debajo."
         )
-        st.plotly_chart(fig_heatmap, use_container_width=True)
-        st.dataframe(
-            heatmap.features.rename(columns={
-                "feature_code": "codigo",
-                "feature_name": "variable",
-                "feature_type": "tipo",
-                "relative_dispersion": "dispersion relativa",
-            }),
-            use_container_width=True,
-            hide_index=True,
+        semantic_codes = heatmap.features["feature_code"].tolist()
+        semantic_rows = profile_difference_rows(semantic_profiles)
+        semantic_rows = semantic_rows[semantic_rows.feature.isin(semantic_codes)].copy()
+        semantic_rows["deviation"] = [
+            heatmap.matrix.loc[f"Cluster {int(row.cluster_id)}", row.feature]
+            for row in semantic_rows.itertuples()
+        ]
+        fig_heatmap = difference_heatmap(semantic_rows, semantic_codes)
+        fig_heatmap.update_traces(zmin=-1, zmax=1, colorbar_title="Por variable",
+                                  colorbar_tickvals=[-1, 0, 1])
+        fig_heatmap.update_layout(font_size=15)
+        st.plotly_chart(fig_heatmap, width="stretch", config=PLOT_CONFIG_ES,
+                        key=f"semantic_heatmap_{selected_run_id}")
+        st.markdown("##### Leer una característica paso a paso")
+        semantic_feature = st.selectbox(
+            "Característica para explicar", options=semantic_codes,
+            format_func=feature_display_name, key="semantic_map_feature",
         )
-        if heatmap.excluded_nominal_features:
-            st.info(
-                "Las variables nominales se excluyen del heatmap porque sus codigos "
-                "no constituyen una escala numerica: "
-                + ", ".join(f"`{feature}`" for feature in heatmap.excluded_nominal_features),
-                icon=":material/info:",
+        for row in semantic_rows[semantic_rows.feature == semantic_feature].itertuples():
+            st.write(
+                f"**{row.group}:** {row.reading.lower()}. "
+                f"{row.detail}: {row.value}, frente a {row.reference} en la referencia."
             )
+        with st.expander("Ejemplo de lectura y detalles del cálculo"):
+            st.write(
+                "Ejemplo ilustrativo: si una característica aparece en el 60 % de un grupo "
+                "y en el 40 % de la referencia, la diferencia es de 20 puntos porcentuales "
+                "y la celda será roja. No significa que el grupo sea un 20 % mejor."
+            )
+            st.write(
+                "Se muestran hasta diez variables, seleccionadas por la dispersión de sus "
+                "diferencias entre grupos. Se usan medias para variables numéricas, medianas "
+                "para categorías ordenadas y porcentajes para respuestas binarias. "
+                "Las medias y medianas están en la escala procesada, no en años o bolivianos. "
+                "En cada fila, las diferencias se dividen por la mayor diferencia absoluta "
+                "de esa variable: el resultado va de −1 a 1. No mide significación estadística."
+            )
+            if heatmap.excluded_nominal_features:
+                st.write(
+                    "Aquí se omiten categorías sin orden, como religión u ocupación, porque "
+                    "sus códigos no indican más o menos. Sus porcentajes pueden consultarse "
+                    "en Análisis de perfiles y Diferencias. Variables omitidas: "
+                    + ", ".join(feature_display_name(code)
+                                for code in heatmap.excluded_nominal_features) + "."
+                )
 
 with tab_profile_analysis:
     st.markdown("#### Estadisticas segun el tipo de variable")
@@ -845,15 +869,23 @@ with tab_profile_analysis:
             )
 
 with tab_deviation:
+    st.markdown("#### ¿Qué distingue a cada grupo?")
     st.caption(
-        "Mide cuanto se aleja cada cluster del promedio global en la escala procesada. "
-        "Para variables nominales, interpreta el color junto con la tabla de perfiles."
+        "Compara cada grupo con el conjunto de observaciones agrupadas. "
+        "Los puntos de ruido quedan fuera de esta referencia."
     )
-    if profile_deviations.empty:
+    st.info(
+        "**Rojo: por encima de la referencia · Azul: por debajo · Blanco: cerca de ella.** "
+        "Un color más intenso indica una diferencia mayor; no significa un resultado mejor o peor. "
+        "Pasa el cursor por una celda para ver el valor del grupo, la referencia y una explicación."
+    )
+    differences = profile_difference_rows(semantic_profiles)
+    if differences.empty:
         st.warning("No hay diferencias de perfil disponibles para este run.")
     else:
         feature_scores = (
-            profile_deviations.groupby("feature_name")["abs_deviation"]
+            differences.assign(magnitude=differences.deviation.abs())
+            .groupby("feature", sort=False)["magnitude"]
             .max()
             .sort_values(ascending=False)
         )
@@ -864,60 +896,128 @@ with tab_deviation:
             min_value=1,
             max_value=max_features,
             value=default_features,
-        )
+        ) if max_features > 1 else 1
         selected_features = feature_scores.head(n_features).index.tolist()
-        heatmap_data = profile_deviations[
-            profile_deviations["feature_name"].isin(selected_features)
-        ].pivot_table(
-            index="feature_name",
-            columns="cluster",
-            values="deviation",
-            aggfunc="mean",
-        )
-        st.markdown("#### Diferencia del perfil respecto al promedio global")
-        fig_deviation = px.imshow(
-            heatmap_data,
-            color_continuous_scale="RdBu_r",
-            color_continuous_midpoint=0,
-            aspect="auto",
-            labels={
-                "x": "Cluster",
-                "y": "Variable",
-                "color": "Diferencia",
-            },
-            title="Diferencia del perfil respecto al promedio global",
-        )
-        st.plotly_chart(fig_deviation, use_container_width=True)
-
-        st.markdown("#### Variables mas distintivas por cluster")
+        fig_deviation = difference_heatmap(differences, selected_features)
+        st.plotly_chart(fig_deviation, width="stretch", config=PLOT_CONFIG_ES,
+                        key=f"profile_differences_{selected_run_id}")
+        with st.expander("Cómo se calculan las diferencias"):
+            st.markdown(
+                "- **Numéricas:** media del grupo frente a la media de referencia.\n"
+                "- **Ordinales:** mediana del grupo frente a la mediana de referencia.\n"
+                "- **Binarias:** porcentaje de la categoría indicada.\n"
+                "- **Nominales:** porcentaje de una categoría, indicada al pasar el cursor. "
+                "Se elige la categoría que más cambia entre grupos y se mantiene la misma en toda la fila.\n\n"
+                "Ejemplo: **60 % frente a 40 % = 20 puntos porcentuales por encima**, "
+                "no un aumento del 20 %. Para el color, esa diferencia se representa como 0,20. "
+                "Las medias y medianas se expresan en la escala procesada; no en años ni bolivianos. "
+                "Compara principalmente los grupos dentro de una misma fila."
+            )
+        st.markdown("#### Diferencias explicadas por grupo")
+        group = st.selectbox("Grupo para interpretar", differences.sort_values("cluster_id").group.unique())
+        explained = differences[differences.group == group].copy()
+        explained["magnitude"] = explained.deviation.abs()
+        explained = explained.sort_values("magnitude", ascending=False)
+        for _, item in explained.head(3).iterrows():
+            st.markdown(
+                f"**{item['variable']}** — {item['reading']}. "
+                f"{item['detail']}: **{item['value']}** en el grupo frente a "
+                f"**{item['reference']}** en la referencia."
+            )
         st.dataframe(
-            _top_features_display(top_features),
+            explained[["variable", "reading", "detail", "value", "reference"]].rename(columns={
+                "variable": "Variable", "detail": "Qué se compara", "value": "En el grupo",
+                "reference": "Referencia", "reading": "Cómo interpretarlo",
+            }),
             use_container_width=True,
             hide_index=True,
         )
 
 with tab_distances:
-    st.caption(
-        "Compara perfiles promedio entre clusters. Valores menores indican perfiles "
-        "demograficos mas parecidos."
+    st.markdown("#### ¿Qué grupos tienen perfiles promedio más parecidos?")
+    st.write(
+        "Esta vista resume en un solo número la diferencia entre dos perfiles promedio. "
+        "Busca un grupo en la fila y otro en la columna: la celda donde se cruzan "
+        "muestra su distancia."
+    )
+    st.info(
+        "Azul claro y número menor: perfiles más parecidos. Azul oscuro y número mayor: "
+        "perfiles más diferentes. La diagonal vale cero porque compara cada grupo consigo "
+        "mismo; las dos mitades del mapa repiten las mismas comparaciones."
     )
     if profile_distances.empty:
         st.warning("No hay distancias entre perfiles disponibles para este run.")
     else:
-        st.markdown("#### Distancia euclidiana entre perfiles de clusters")
+        distance_display = profile_distances.rename(
+            index=lambda value: f"Grupo {value}", columns=lambda value: f"Grupo {value}"
+        )
+        pairs = [
+            {"Primer grupo": distance_display.index[i],
+             "Segundo grupo": distance_display.columns[j],
+             "Distancia": float(distance_display.iloc[i, j])}
+            for i in range(len(distance_display)) for j in range(i + 1, len(distance_display))
+        ]
+        pair_table = pd.DataFrame(pairs)
+        if not pair_table.empty:
+            pair_table = pair_table.sort_values("Distancia", kind="stable")
+            nearest, farthest = pair_table.iloc[0], pair_table.iloc[-1]
+            nearest_value = f"{nearest['Distancia']:.3f}".replace(".", ",")
+            farthest_value = f"{farthest['Distancia']:.3f}".replace(".", ",")
+            st.write(
+                f"**Una pareja con la menor distancia:** {nearest['Primer grupo']} y "
+                f"{nearest['Segundo grupo']} ({nearest_value}). "
+                f"**Una pareja con la mayor distancia:** {farthest['Primer grupo']} y "
+                f"{farthest['Segundo grupo']} ({farthest_value})."
+            )
+            if len(pair_table) == 1:
+                st.caption("Solo hay dos grupos: existe una única pareja para comparar.")
+        else:
+            st.caption("Se necesitan al menos dos grupos para comparar perfiles diferentes.")
         fig_distances = px.imshow(
-            profile_distances,
+            distance_display,
             color_continuous_scale="Blues",
+            zmin=0,
             aspect="auto",
+            text_auto=".2f",
             labels={
-                "x": "Cluster",
-                "y": "Cluster",
+                "x": "",
+                "y": "",
                 "color": "Distancia",
             },
-            title="Distancia euclidiana entre perfiles de clusters",
         )
-        st.plotly_chart(fig_distances, use_container_width=True)
-        st.dataframe(profile_distances.round(4), use_container_width=True)
+        fig_distances.update_layout(height=max(460, len(distance_display) * 42 + 120),
+                                    dragmode=False, font_size=15)
+        fig_distances.update_xaxes(type="category", fixedrange=True, tickmode="array",
+                                  tickvals=distance_display.columns.tolist())
+        fig_distances.update_yaxes(type="category", fixedrange=True, tickmode="array",
+                                  tickvals=distance_display.index.tolist())
+        fig_distances.update_traces(
+            hovertemplate="%{y} y %{x}<br>Distancia: %{z:.3f}<extra></extra>"
+        )
+        st.plotly_chart(fig_distances, width="stretch", config=PLOT_CONFIG_ES,
+                        key=f"profile_distances_{selected_run_id}")
+        st.write(
+            "**¿Qué puedo concluir?** Una distancia menor indica mayor semejanza entre "
+            "los promedios en esta ejecución. No significa que todas las personas de ambos "
+            "grupos sean iguales, ni que los grupos deban unirse. Consulta Diferencias "
+            "y Análisis de perfiles para entender qué características los separan."
+        )
+        with st.expander("Ver todas las parejas y cómo se calcula la distancia"):
+            st.write(
+                "Se calcula la distancia euclidiana entre las medias de las variables "
+                "procesadas, sin aplicar aquí los pesos del algoritmo. No es una distancia "
+                "geográfica, un porcentaje ni necesariamente la distancia usada para formar "
+                "los grupos. No existe un umbral universal de cerca o lejos."
+            )
+            st.write(
+                "Ejemplo ilustrativo: 0,2 indica más semejanza que 0,8 dentro de una misma "
+                "ejecución, pero no equivale a un 80 % de semejanza. Esta vista incluye "
+                "promedios de códigos de categorías sin orden; por eso es un resumen "
+                "exploratorio y debe acompañarse de sus distribuciones por categoría. "
+                "Las observaciones de ruido no se incluyen."
+            )
+            if not pair_table.empty:
+                st.dataframe(pair_table, hide_index=True, width="stretch")
 
 with tab_dimensions:
     st.caption(
