@@ -6,10 +6,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pandas as pd
 from src.visualization.semantic_profiles import cluster_semantic_profiles
+from src.visualization.plotly_config import HEATMAP_PLOT_CONFIG_ES, PLOT_CONFIG_ES
 from src.visualization.profile_differences import profile_difference_rows, difference_heatmap
 
 
 class ProfileDifferencesTest(unittest.TestCase):
+    def test_plotly_configuration_keeps_interactive_charts_available(self):
+        self.assertEqual(PLOT_CONFIG_ES["locale"], "es")
+        self.assertEqual(
+            PLOT_CONFIG_ES["locales"]["es"]["dictionary"]["Zoom in"], "Acercar"
+        )
+        self.assertNotIn("modeBarButtons", PLOT_CONFIG_ES)
+        self.assertEqual(HEATMAP_PLOT_CONFIG_ES["modeBarButtons"], [["toImage"]])
+
     def test_percentages_use_grouped_population_and_percentage_points(self):
         data = pd.DataFrame({"ur": [1, 1, 0, 0, 0]})
         rows = profile_difference_rows(cluster_semantic_profiles(data, [0, 0, 1, 1, -1]))

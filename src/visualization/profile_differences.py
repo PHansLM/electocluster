@@ -4,25 +4,6 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-
-PLOT_CONFIG_ES = {
-    "locale": "es",
-    "locales": {"es": {"dictionary": {
-        "Download plot as a PNG": "Descargar gráfico como PNG",
-        "Download plot as a png": "Descargar gráfico como PNG",
-        "Taking snapshot - this may take a few seconds": "Preparando imagen…",
-        "Snapshot succeeded": "Imagen descargada",
-        "Sorry, there was a problem downloading your snapshot!": "No se pudo descargar la imagen",
-    }, "format": {"decimal": ",", "thousands": "."}}},
-    "displaylogo": False,
-    "displayModeBar": True,
-    "modeBarButtons": [["toImage"]],
-    "scrollZoom": False,
-    "doubleClick": False,
-    "toImageButtonOptions": {"filename": "diferencias_por_grupo", "scale": 2},
-}
-
-
 def profile_difference_rows(profiles) -> pd.DataFrame:
     """Una fila por variable/grupo; nominales comparan la misma categoría.
 
