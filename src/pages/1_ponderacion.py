@@ -274,7 +274,7 @@ with col_reset:
         wm.reset_weights_values()
         st.cache_resource.clear()
         st.session_state["weights_form_version"] += 1
-        st.session_state["weights_flash_message"] = "Pesos restaurados desde constants.py."
+        st.session_state["weights_flash_message"] = "Pesos restaurados a los valores predeterminados (constants.py)."
         st.rerun()
 
 # ── Vista previa del esquema actual ──────────────────────────────────────────
