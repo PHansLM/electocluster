@@ -174,7 +174,7 @@ if pesos_modificados:
                 }
                 for var, nombre, original, current in pesos_modificados
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -186,7 +186,7 @@ with col_save:
         "Guardar esquema",
         type="primary",
         icon=":material/save:",
-        use_container_width=True,
+        width="stretch",
     ):
         try:
             wm.set_weights(nuevos_pesos)
@@ -201,7 +201,7 @@ with col_reset:
     if st.button(
         "Restaurar valores por defecto",
         icon=":material/refresh:",
-        use_container_width=True,
+        width="stretch",
     ):
         wm.reset_weights_values()
         st.cache_resource.clear()
