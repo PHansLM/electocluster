@@ -27,7 +27,7 @@ from src.visualization import cluster_distribution
 from src.weighting.weight_manager import WeightManager
 
 
-st.set_page_config(page_title="Ejecucion - ElectoCluster", layout="wide")
+st.set_page_config(page_title="Ejecución · ElectoCluster", layout="wide")
 apply_app_shell("Ejecución")
 
 SOURCE_ACTIVE = "Activa"
@@ -54,7 +54,7 @@ PARAM_LABELS = {
     "pca_components": "PCA",
 }
 
-st.title("Ejecucion de Clustering")
+st.title("Ejecución de clustering")
 st.markdown(
     "Arma un plan con una o varias configuraciones ponderadas, calcula metricas "
     "de validacion interna y guarda cada run para comparacion posterior."
@@ -367,6 +367,8 @@ same_count = int((comparison_table["estado"] == "Igual").sum())
 st.caption(f"Comparación: **{diff_count} diferencias** · {same_count} coincidencias")
 
 _render_config_comparison_table(comparison_table)
+
+st.divider()
 
 st.markdown("### Plan de ejecucion")
 st.caption(

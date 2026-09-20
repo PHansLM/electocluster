@@ -16,7 +16,7 @@ from src.weighting.weight_manager import WeightManager
 st.set_page_config(page_title="Ponderación · ElectoCluster", layout="wide")
 apply_app_shell("Ponderación")
 
-st.title("Esquema de Ponderación")
+st.title("Esquema de ponderación")
 st.markdown(
     "Ajusta el peso de cada característica demográfica. "
     "Los cambios quedan pendientes hasta que guardes el esquema activo."

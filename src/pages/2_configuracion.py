@@ -30,7 +30,7 @@ apply_app_shell("Configuración")
 
 ALGORITHMS = ["WKMedoids", "W-Hierarchical Clustering", "W-DBSCAN"]
 
-st.title("Configuración de Algoritmos")
+st.title("Configuración de algoritmos")
 st.markdown(
     "Edita y guarda la configuración activa de cada algoritmo. La ejecución se "
     "realiza después desde la página de Ejecución, donde puedes correr una o varias "
@@ -192,6 +192,8 @@ else:
     )
 
 _save_active_params(algorithm, params)
+
+st.divider()
 
 st.markdown("### Asistente de parámetros")
 st.caption(

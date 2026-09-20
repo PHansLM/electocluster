@@ -48,14 +48,14 @@ from src.visualization import (
 )
 
 
-st.set_page_config(page_title="Resultados - ElectoCluster", layout="wide")
+st.set_page_config(page_title="Resultados · ElectoCluster", layout="wide")
 apply_app_shell("Resultados")
 ACTIVE_THEME = st.context.theme.type
 
-st.title("Resultados y Reportes")
+st.title("Resultados y reportes")
 st.markdown(
-    "Explora ejecuciones guardadas, compara metricas y exporta evidencia "
-    "para la redaccion del Capitulo 8."
+    "Explora ejecuciones guardadas, compara métricas y exporta evidencia "
+    "para la redacción del capítulo 8."
 )
 
 rm = ResultsManager()
@@ -548,7 +548,8 @@ if len(labels) != len(df):
     )
     st.stop()
 
-st.markdown("### Detalle del run")
+st.divider()
+st.markdown("### Detalle de la ejecución")
 evaluation_summary = run_evaluation_summary(run)
 st.caption(f"Algoritmo: **{run.get('algorithm')}**")
 metric_row_1 = st.columns(3)

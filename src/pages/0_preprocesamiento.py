@@ -122,7 +122,7 @@ def _render_variable_diagnostic(dataset_path: str | Path):
 st.set_page_config(page_title="Preprocesamiento · ElectoCluster", layout="wide")
 apply_app_shell("Preprocesamiento")
 
-st.title("Preprocesamiento de Datos")
+st.title("Preprocesamiento de datos")
 st.markdown(
     "Configura y ejecuta el pipeline de preprocesamiento sobre el dataset electoral. "
     "El dataset procesado se guarda en `data/processed/` y es consumido por las "
@@ -164,6 +164,8 @@ else:
         "Verifica que el archivo .dta esté en `data/raw/`.",
         icon=":material/error:",
     )
+
+st.divider()
 
 # ── Fuente de datos ──────────────────────────────────────────────────────────
 st.markdown("### Fuente de datos")
