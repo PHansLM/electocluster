@@ -10,6 +10,8 @@ import pandas as pd
 import seaborn as sns
 from sklearn.decomposition import PCA
 
+from src.visualization.plotly_config import cluster_color_map
+
 
 def cluster_distribution(labels) -> pd.DataFrame:
     """Retorna tamanos y porcentajes por cluster, incluyendo ruido."""
@@ -88,27 +90,36 @@ def save_run_figures(
     }
 
     plt.figure(figsize=(9, 6))
+    projection_colors = cluster_color_map(projection["cluster"])
     sns.scatterplot(
         data=projection,
         x="PC1",
         y="PC2",
         hue="cluster",
-        palette="tab10",
+        palette=projection_colors,
         s=35,
         linewidth=0,
     )
     plt.title(f"Clusters proyectados en PCA 2D - {run_id}")
     plt.tight_layout()
-    plt.savefig(paths["pca_clusters"], dpi=220, bbox_inches="tight")
+    plt.savefig(paths["pca_clusters"], dpi=220, bbox_inches="tight", facecolor="white")
     plt.close()
 
     plt.figure(figsize=(8, 5))
-    sns.barplot(data=distribution, x="cluster", y="size", color="#2563eb")
+    distribution_colors = cluster_color_map(distribution["cluster"])
+    sns.barplot(
+        data=distribution,
+        x="cluster",
+        y="size",
+        hue="cluster",
+        palette=distribution_colors,
+        legend=False,
+    )
     plt.title(f"Distribucion de clusters - {run_id}")
     plt.xlabel("Cluster")
     plt.ylabel("Registros")
     plt.tight_layout()
-    plt.savefig(paths["distribution"], dpi=220, bbox_inches="tight")
+    plt.savefig(paths["distribution"], dpi=220, bbox_inches="tight", facecolor="white")
     plt.close()
 
     if not profiles.empty and profiles.shape[1] > 3:
@@ -118,7 +129,7 @@ def save_run_figures(
         sns.heatmap(profile_values, cmap="viridis", cbar=True)
         plt.title(f"Perfil promedio por cluster - {run_id}")
         plt.tight_layout()
-        plt.savefig(heatmap_path, dpi=220, bbox_inches="tight")
+        plt.savefig(heatmap_path, dpi=220, bbox_inches="tight", facecolor="white")
         plt.close()
         paths["profiles"] = heatmap_path
 

@@ -85,14 +85,14 @@ def difference_heatmap(rows: pd.DataFrame, feature_codes: list[str]) -> go.Figur
         customdata=custom, colorscale="RdBu_r", zmin=-bound, zmax=bound, zmid=0,
         xgap=2, ygap=2,
         colorbar=dict(title="Diferencia", tickvals=[-bound, 0, bound],
-                      ticktext=["Por debajo", "Igual", "Por encima"], thickness=16),
+                      ticktext=["Por debajo", "Igual", "Por encima"], thickness=14),
         hovertemplate=("<b>%{y}</b><br>%{x}<br>%{customdata[0]}<br>"
                        "Grupo: %{customdata[1]}<br>Referencia: %{customdata[2]}<br>"
                        "<b>%{customdata[3]}</b><extra></extra>"),
     ))
     fig.update_layout(
         height=max(440, len(feature_codes) * 34 + 110),
-        margin=dict(l=300, r=125, t=25, b=65), dragmode=False,
+        margin=dict(l=24, r=90, t=24, b=55), dragmode=False,
         xaxis=dict(type="category", tickmode="array", tickvals=groups, title=None,
                    fixedrange=True, automargin=True),
         yaxis=dict(type="category", tickmode="array", tickvals=[labels[c] for c in feature_codes],

@@ -24,7 +24,13 @@ from src.evaluation.report_generator import ReportGenerator
 from src.evaluation.results_manager import RESULTS_PATH, ResultsManager
 from src.ui import apply_app_shell
 from src.utils.constants import PROCESSED_DATA_PATH
-from src.visualization.plotly_config import HEATMAP_PLOT_CONFIG_ES, PLOT_CONFIG_ES
+from src.visualization.plotly_config import (
+    ALGORITHM_COLOR_MAP,
+    HEATMAP_PLOT_CONFIG_ES,
+    PLOT_CONFIG_ES,
+    apply_plotly_theme,
+    cluster_color_map,
+)
 from src.visualization.profile_differences import difference_heatmap, profile_difference_rows
 from src.visualization import (
     PROFILE_METADATA_COLUMNS,
@@ -44,6 +50,7 @@ from src.visualization import (
 
 st.set_page_config(page_title="Resultados - ElectoCluster", layout="wide")
 apply_app_shell("Resultados")
+ACTIVE_THEME = st.context.theme.type
 
 st.title("Resultados y Reportes")
 st.markdown(
@@ -612,12 +619,18 @@ with tab_dist:
         distribution,
         x="cluster",
         y="size",
+        color="cluster",
+        color_discrete_map=cluster_color_map(distribution["cluster"]),
         text="percentage",
         labels={"cluster": "Cluster", "size": "Registros"},
         title="Distribucion de registros por cluster",
     )
     fig_dist.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-    st.plotly_chart(fig_dist, use_container_width=True, config=PLOT_CONFIG_ES)
+    fig_dist.update_layout(showlegend=False)
+    apply_plotly_theme(
+        fig_dist, ACTIVE_THEME, margin={"l": 20, "r": 20, "t": 55, "b": 45}
+    )
+    st.plotly_chart(fig_dist, width="stretch", config=PLOT_CONFIG_ES)
     st.markdown("#### Perfiles descriptivos por cluster")
     st.caption(
         "La tabla integra tamaño, porcentaje e interpretacion de variables, por lo que "
@@ -666,10 +679,14 @@ with tab_projection:
         x="PC1",
         y="PC2",
         color="cluster",
+        color_discrete_map=cluster_color_map(projection["cluster"]),
         hover_data=["cluster_id"],
         title="Proyeccion PCA 2D de clusters",
     )
-    st.plotly_chart(fig_projection, use_container_width=True, config=PLOT_CONFIG_ES)
+    apply_plotly_theme(
+        fig_projection, ACTIVE_THEME, margin={"l": 25, "r": 20, "t": 55, "b": 45}
+    )
+    st.plotly_chart(fig_projection, width="stretch", config=PLOT_CONFIG_ES)
 
 with tab_heatmap:
     st.markdown("#### ¿En qué características destaca cada grupo?")
@@ -703,7 +720,12 @@ with tab_heatmap:
         fig_heatmap = difference_heatmap(semantic_rows, semantic_codes)
         fig_heatmap.update_traces(zmin=-1, zmax=1, colorbar_title="Por variable",
                                   colorbar_tickvals=[-1, 0, 1])
-        fig_heatmap.update_layout(font_size=15)
+        apply_plotly_theme(
+            fig_heatmap,
+            ACTIVE_THEME,
+            margin={"l": 24, "r": 90, "t": 24, "b": 55},
+            font_size=14,
+        )
         st.plotly_chart(fig_heatmap, width="stretch", config=HEATMAP_PLOT_CONFIG_ES,
                         key=f"semantic_heatmap_{selected_run_id}")
         st.markdown("##### Leer una característica paso a paso")
@@ -832,7 +854,12 @@ with tab_profile_analysis:
                 },
                 title="Diferencia de medias frente al total analizado",
             )
-            st.plotly_chart(fig_semantic_numeric, use_container_width=True, config=PLOT_CONFIG_ES)
+            apply_plotly_theme(
+                fig_semantic_numeric,
+                ACTIVE_THEME,
+                margin={"l": 30, "r": 20, "t": 55, "b": 80},
+            )
+            st.plotly_chart(fig_semantic_numeric, width="stretch", config=PLOT_CONFIG_ES)
         else:
             feature_options = selected_summaries["feature_code"].tolist()
             selected_semantic_feature = st.selectbox(
@@ -875,7 +902,12 @@ with tab_profile_analysis:
                     },
                     title=f"Distribucion de {feature_display_name(selected_semantic_feature)}",
                 )
-                st.plotly_chart(fig_semantic_distribution, use_container_width=True,
+                apply_plotly_theme(
+                    fig_semantic_distribution,
+                    ACTIVE_THEME,
+                    margin={"l": 30, "r": 20, "t": 55, "b": 70},
+                )
+                st.plotly_chart(fig_semantic_distribution, width="stretch",
                                 config=PLOT_CONFIG_ES)
                 st.dataframe(
                     _semantic_distribution_display(selected_distribution),
@@ -968,6 +1000,12 @@ with tab_deviation:
         ) if max_features > 1 else 1
         selected_features = feature_scores.head(n_features).index.tolist()
         fig_deviation = difference_heatmap(differences, selected_features)
+        apply_plotly_theme(
+            fig_deviation,
+            ACTIVE_THEME,
+            margin={"l": 24, "r": 90, "t": 24, "b": 55},
+            font_size=14,
+        )
         st.plotly_chart(fig_deviation, width="stretch", config=HEATMAP_PLOT_CONFIG_ES,
                         key=f"profile_differences_{selected_run_id}")
         with st.expander("Cómo se calculan las diferencias"):
@@ -1063,6 +1101,12 @@ with tab_distances:
         fig_distances.update_traces(
             hovertemplate="%{y} y %{x}<br>Distancia: %{z:.3f}<extra></extra>"
         )
+        apply_plotly_theme(
+            fig_distances,
+            ACTIVE_THEME,
+            margin={"l": 70, "r": 80, "t": 20, "b": 55},
+            font_size=14,
+        )
         st.plotly_chart(fig_distances, width="stretch", config=HEATMAP_PLOT_CONFIG_ES,
                         key=f"profile_distances_{selected_run_id}")
         st.write(
@@ -1109,12 +1153,12 @@ with tab_dimensions:
             radar_data = dimension_scores[
                 dimension_scores["cluster"].isin(selected_clusters)
             ]
-            st.markdown("#### Radar de dimensiones agregadas")
             fig_radar = px.line_polar(
                 radar_data,
                 r="cluster_value",
                 theta="dimension",
                 color="cluster",
+                color_discrete_map=cluster_color_map(radar_data["cluster"]),
                 line_close=True,
                 range_r=[0, 1],
                 labels={
@@ -1124,7 +1168,14 @@ with tab_dimensions:
                 },
                 title="Radar de dimensiones agregadas",
             )
-            st.plotly_chart(fig_radar, use_container_width=True, config=PLOT_CONFIG_ES)
+            fig_radar.update_traces(mode="lines+markers", line={"width": 2.5})
+            apply_plotly_theme(
+                fig_radar,
+                ACTIVE_THEME,
+                margin={"l": 50, "r": 50, "t": 60, "b": 35},
+                polar=True,
+            )
+            st.plotly_chart(fig_radar, width="stretch", config=PLOT_CONFIG_ES)
         else:
             st.warning("Selecciona al menos un cluster para el radar.", icon=":material/warning:")
 
@@ -1134,7 +1185,6 @@ with tab_dimensions:
             values="deviation",
             aggfunc="mean",
         )
-        st.markdown("#### Diferencia de dimensiones frente al promedio global")
         fig_dimensions = px.imshow(
             dimension_heatmap,
             color_continuous_scale="RdBu_r",
@@ -1147,7 +1197,12 @@ with tab_dimensions:
             },
             title="Diferencia de dimensiones frente al promedio global",
         )
-        st.plotly_chart(fig_dimensions, use_container_width=True, config=PLOT_CONFIG_ES)
+        apply_plotly_theme(
+            fig_dimensions,
+            ACTIVE_THEME,
+            margin={"l": 30, "r": 75, "t": 60, "b": 55},
+        )
+        st.plotly_chart(fig_dimensions, width="stretch", config=PLOT_CONFIG_ES)
         st.dataframe(
             _dimension_scores_display(dimension_scores),
             width="stretch",
@@ -1213,6 +1268,8 @@ with tab_compare:
                     x="run_label",
                     y=metric_key,
                     color="algorithm",
+                    color_discrete_map=ALGORITHM_COLOR_MAP,
+                    category_orders={"algorithm": list(ALGORITHM_COLOR_MAP)},
                     hover_data=["run_id"],
                     text=metric_key,
                     labels={
@@ -1226,8 +1283,13 @@ with tab_compare:
                     texttemplate=f"%{{text:.{spec['precision']}f}}",
                     textposition="outside",
                 )
+                apply_plotly_theme(
+                    fig_metric,
+                    ACTIVE_THEME,
+                    margin={"l": 30, "r": 20, "t": 55, "b": 90},
+                )
                 fig_metric.update_layout(xaxis_tickangle=-25)
-                st.plotly_chart(fig_metric, use_container_width=True, config=PLOT_CONFIG_ES)
+                st.plotly_chart(fig_metric, width="stretch", config=PLOT_CONFIG_ES)
 
         st.dataframe(comparison_df, width="stretch", hide_index=True)
 
