@@ -8,6 +8,8 @@ Ejecución: streamlit run app.py
 
 import streamlit as st
 
+from src.ui import apply_app_shell
+
 st.set_page_config(
     page_title="ElectoCluster",
     page_icon="EC",
@@ -15,63 +17,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Estilos globales ──────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-    /* Tipografía y color base */
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'IBM Plex Sans', sans-serif;
-    }
-    code, .stCode {
-        font-family: 'IBM Plex Mono', monospace !important;
-    }
-
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #0f1117;
-        border-right: 1px solid #2a2d3a;
-    }
-    [data-testid="stSidebar"] * {
-        color: #e0e0e0 !important;
-    }
-
-    /* Tarjetas de métricas */
-    [data-testid="metric-container"] {
-        background: #1a1d27;
-        border: 1px solid #2a2d3a;
-        border-radius: 8px;
-        padding: 12px;
-    }
-
-    /* Botón principal */
-    .stButton > button[kind="primary"] {
-        background: #2563eb;
-        border: none;
-        border-radius: 6px;
-        font-weight: 500;
-        letter-spacing: 0.02em;
-    }
-    .stButton > button[kind="primary"]:hover {
-        background: #1d4ed8;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ── Sidebar ───────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## ElectoCluster")
-    st.markdown("**Segmentación electoral ponderada**")
-    st.markdown("---")
-    st.markdown(
-        "Dataset: *Barómetro de las Américas 2023*  \n"
-        "LAPOP — Bolivia  \n"
-        "n = 1,706 registros · 28 variables"
-    )
-    st.markdown("---")
-    st.caption("Trabajo de Grado · UMSS 2026")
-    st.caption("Pablo Limachi Martínez")
+apply_app_shell("Inicio")
 
 # ── Página de inicio ──────────────────────────────────────────────────────────
 st.title("ElectoCluster")

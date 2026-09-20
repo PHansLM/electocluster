@@ -22,6 +22,7 @@ from src.evaluation.comparability import assess_run_comparability, run_evaluatio
 from src.evaluation.provenance import sha256_file, stored_dataset_sha256
 from src.evaluation.report_generator import ReportGenerator
 from src.evaluation.results_manager import RESULTS_PATH, ResultsManager
+from src.ui import apply_app_shell
 from src.utils.constants import PROCESSED_DATA_PATH
 from src.visualization.plotly_config import HEATMAP_PLOT_CONFIG_ES, PLOT_CONFIG_ES
 from src.visualization.profile_differences import difference_heatmap, profile_difference_rows
@@ -42,6 +43,7 @@ from src.visualization import (
 
 
 st.set_page_config(page_title="Resultados - ElectoCluster", layout="wide")
+apply_app_shell("Resultados")
 
 st.title("Resultados y Reportes")
 st.markdown(
@@ -138,7 +140,8 @@ def _render_profiles_table(profiles: pd.DataFrame):
     header_cells = []
     for column in columns:
         label = column if column in PROFILE_METADATA_COLUMNS else feature_display_name(column)
-        header_cells.append(f"<th>{escape(str(label))}</th>")
+        css_class = " class='profile-meta-header'" if column in PROFILE_METADATA_COLUMNS else ""
+        header_cells.append(f"<th{css_class}>{escape(str(label))}</th>")
 
     body_rows = []
     for _, row in profiles.iterrows():
@@ -173,8 +176,9 @@ def _render_profiles_table(profiles: pd.DataFrame):
     <style>
       .profile-table-wrap {{
         overflow-x: auto;
-        border: 1px solid rgba(148, 163, 184, 0.22);
+        border: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
         border-radius: 8px;
+        background: var(--background-color);
       }}
       .profile-table {{
         width: max-content;
@@ -185,11 +189,12 @@ def _render_profiles_table(profiles: pd.DataFrame):
       .profile-table th {{
         position: sticky;
         top: 0;
+        z-index: 2;
         text-align: left;
         padding: 9px 10px;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
-        background: rgba(148, 163, 184, 0.10);
-        color: #cbd5e1;
+        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 22%, transparent);
+        background: var(--secondary-background-color);
+        color: var(--text-color);
         white-space: nowrap;
       }}
       .profile-table td {{
@@ -197,27 +202,53 @@ def _render_profiles_table(profiles: pd.DataFrame):
         max-width: 230px;
         vertical-align: top;
         padding: 9px 10px;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
-        border-right: 1px solid rgba(148, 163, 184, 0.10);
+        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
+        border-right: 1px solid color-mix(in srgb, var(--text-color) 10%, transparent);
+      }}
+      .profile-table tbody tr:nth-child(odd) td {{
+        background: var(--background-color);
+      }}
+      .profile-table tbody tr:nth-child(even) td {{
+        background: color-mix(in srgb, var(--secondary-background-color) 55%, transparent);
+      }}
+      .profile-table th:first-child,
+      .profile-table td:first-child {{
+        position: sticky;
+        left: 0;
+      }}
+      .profile-table th:first-child {{
+        z-index: 3;
+      }}
+      .profile-table td:first-child {{
+        z-index: 1;
       }}
       .profile-table tbody tr:last-child td {{
         border-bottom: none;
       }}
+      .profile-meta-header {{
+        text-align: right !important;
+      }}
       .profile-meta {{
         min-width: 70px !important;
-        font-weight: 800;
-        color: #f8fafc;
+        text-align: right;
+        color: var(--text-color);
+        font-variant-numeric: tabular-nums;
+        font-weight: 620;
+      }}
+      .profile-table td:first-child {{
+        text-align: center;
+        color: var(--text-color);
       }}
       .profile-meaning {{
-        color: #f8fafc;
-        font-weight: 700;
-        line-height: 1.25;
+        color: var(--text-color);
+        font-weight: 520;
+        line-height: 1.4;
       }}
       .profile-raw {{
         margin-top: 0.25rem;
-        color: rgba(203, 213, 225, 0.62);
+        color: color-mix(in srgb, var(--text-color) 64%, transparent);
         font-size: 0.78rem;
-        line-height: 1.2;
+        line-height: 1.35;
       }}
     </style>
     """.format(headers="".join(header_cells), rows="".join(body_rows))
@@ -393,8 +424,32 @@ def _semantic_distribution_display(distribution: pd.DataFrame) -> pd.DataFrame:
 st.markdown("### Ejecuciones guardadas")
 st.dataframe(
     runs_df.sort_values("timestamp", ascending=False),
-    use_container_width=True,
+    width="stretch",
+    height=190,
+    row_height=34,
     hide_index=True,
+    column_config={
+        "run_id": st.column_config.TextColumn(
+            "Identificador",
+            width="large",
+            pinned=True,
+            help="Identificador completo y único de la ejecución.",
+        ),
+        "algorithm": st.column_config.TextColumn("Algoritmo", width="medium", pinned=True),
+        "timestamp": st.column_config.DatetimeColumn(
+            "Fecha",
+            format="DD/MM/YYYY HH:mm:ss",
+            width="medium",
+        ),
+        "silhouette": st.column_config.NumberColumn("Silhouette", format="%.4f"),
+        "davies_bouldin": st.column_config.NumberColumn("Davies-Bouldin", format="%.4f"),
+        "calinski_harabasz": st.column_config.NumberColumn(
+            "Calinski-Harabasz",
+            format="%.2f",
+        ),
+        "coverage_percentage": st.column_config.NumberColumn("Cobertura (%)", format="%.2f"),
+        "noise_percentage": st.column_config.NumberColumn("Ruido (%)", format="%.2f"),
+    },
 )
 
 suites = rm.list_suites()
@@ -444,7 +499,7 @@ with st.expander("Evidencia integrada de la bateria canonica", expanded=False):
             }
             for item in suite.get("runs", [])
         ])
-        st.dataframe(suite_table, use_container_width=True, hide_index=True)
+        st.dataframe(suite_table, width="stretch", hide_index=True)
 
 run_options = runs_df["run_id"].tolist()
 default_run = st.session_state.get("last_run_id")
@@ -489,16 +544,20 @@ if len(labels) != len(df):
 st.markdown("### Detalle del run")
 evaluation_summary = run_evaluation_summary(run)
 st.caption(f"Algoritmo: **{run.get('algorithm')}**")
-col1, col2, col3, col4, col5, col6 = st.columns(6)
+metric_row_1 = st.columns(3)
+metric_row_2 = st.columns(3)
 metrics = run.get("metrics", {})
 coverage_percentage = evaluation_summary["coverage_percentage"]
 coverage_label = "N/A" if coverage_percentage is None else f"{coverage_percentage:.1f}%"
-col1.metric("Clusters", run.get("n_clusters"))
-col2.metric("Evaluadas", f"{evaluation_summary['n_evaluated']}/{evaluation_summary['n_total']}")
-col3.metric("Cobertura", coverage_label)
-col4.metric("Ruido", run.get("n_noise"))
-col5.metric("Silhouette", _format_metric(metrics.get("silhouette"), 4))
-col6.metric("Davies-Bouldin", _format_metric(metrics.get("davies_bouldin"), 4))
+metric_row_1[0].metric("Clusters", run.get("n_clusters"))
+metric_row_1[1].metric(
+    "Evaluadas",
+    f"{evaluation_summary['n_evaluated']}/{evaluation_summary['n_total']}",
+)
+metric_row_1[2].metric("Cobertura", coverage_label)
+metric_row_2[0].metric("Ruido", run.get("n_noise"))
+metric_row_2[1].metric("Silhouette", _format_metric(metrics.get("silhouette"), 4))
+metric_row_2[2].metric("Davies-Bouldin", _format_metric(metrics.get("davies_bouldin"), 4))
 
 with st.expander("Parametros, pesos y metadata", expanded=False):
     c1, c2 = st.columns(2)
@@ -515,6 +574,8 @@ with st.expander("Parametros, pesos y metadata", expanded=False):
             data=json.dumps(run, indent=2, ensure_ascii=False).encode("utf-8"),
             file_name=f"{selected_run_id}.json",
             mime="application/json",
+            icon=":material/download:",
+            width="stretch",
         )
 
 distribution = cluster_distribution(labels)
@@ -567,18 +628,24 @@ with tab_dist:
     else:
         _render_profiles_table(profiles)
         csv = profiles.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Descargar perfiles CSV",
-            data=csv,
-            file_name=f"{selected_run_id}_perfiles.csv",
-            mime="text/csv",
-        )
+    profile_export_col, figure_export_col = st.columns(2)
+    with profile_export_col:
+        if not profiles.empty:
+            st.download_button(
+                "Descargar perfiles CSV",
+                data=csv,
+                file_name=f"{selected_run_id}_perfiles.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                width="stretch",
+            )
 
-    if st.button(
+    save_figures = figure_export_col.button(
         "Guardar figuras exportables",
         icon=":material/save:",
-        use_container_width=True,
-    ):
+        width="stretch",
+    )
+    if save_figures:
         paths = save_run_figures(
             df=df,
             labels=labels,
@@ -712,10 +779,9 @@ with tab_profile_analysis:
         cluster_size = int(selected_summaries["cluster_size"].iloc[0])
         semantic_metric_cluster, semantic_metric_type, semantic_metric_features = st.columns(3)
         semantic_metric_cluster.metric("Cluster", selected_semantic_cluster)
-        semantic_metric_type.metric(
-            "Tipo",
-            SEMANTIC_TYPE_LABELS[selected_semantic_type],
-        )
+        with semantic_metric_type:
+            st.markdown("**Tipo**")
+            st.write(SEMANTIC_TYPE_LABELS[selected_semantic_type])
         semantic_metric_features.metric("Variables", len(selected_summaries))
         st.caption(
             f"Estadisticas calculadas sobre {cluster_size} registros asignados al cluster."
@@ -735,7 +801,7 @@ with tab_profile_analysis:
 
         st.dataframe(
             _semantic_summary_display(selected_summaries, selected_semantic_type),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -813,7 +879,7 @@ with tab_profile_analysis:
                                 config=PLOT_CONFIG_ES)
                 st.dataframe(
                     _semantic_distribution_display(selected_distribution),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
 
@@ -849,7 +915,8 @@ with tab_profile_analysis:
                 data=summaries.to_csv(index=False).encode("utf-8"),
                 file_name=f"{selected_run_id}_perfiles_semanticos_resumen.csv",
                 mime="text/csv",
-                use_container_width=True,
+                icon=":material/download:",
+                width="stretch",
             )
         with export_distributions:
             st.download_button(
@@ -857,7 +924,8 @@ with tab_profile_analysis:
                 data=semantic_distributions.to_csv(index=False).encode("utf-8"),
                 file_name=f"{selected_run_id}_perfiles_semanticos_distribuciones.csv",
                 mime="text/csv",
-                use_container_width=True,
+                icon=":material/download:",
+                width="stretch",
             )
         with export_json:
             st.download_button(
@@ -865,7 +933,8 @@ with tab_profile_analysis:
                 data=semantic_json,
                 file_name=f"{selected_run_id}_perfiles_semanticos.json",
                 mime="application/json",
-                use_container_width=True,
+                icon=":material/download:",
+                width="stretch",
             )
 
 with tab_deviation:
@@ -929,7 +998,7 @@ with tab_deviation:
                 "variable": "Variable", "detail": "Qué se compara", "value": "En el grupo",
                 "reference": "Referencia", "reading": "Cómo interpretarlo",
             }),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -1081,7 +1150,7 @@ with tab_dimensions:
         st.plotly_chart(fig_dimensions, use_container_width=True, config=PLOT_CONFIG_ES)
         st.dataframe(
             _dimension_scores_display(dimension_scores),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -1160,7 +1229,7 @@ with tab_compare:
                 fig_metric.update_layout(xaxis_tickangle=-25)
                 st.plotly_chart(fig_metric, use_container_width=True, config=PLOT_CONFIG_ES)
 
-        st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+        st.dataframe(comparison_df, width="stretch", hide_index=True)
 
     if len(compare_ids) >= 2:
         if st.button(

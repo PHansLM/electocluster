@@ -21,10 +21,12 @@ from src.evaluation.parameter_optimizer import (
     optimize_whierarchical_params,
     optimize_wkmedoids_params,
 )
+from src.ui import apply_app_shell
 from src.weighting.weight_manager import WeightManager
 
 
 st.set_page_config(page_title="Configuración · ElectoCluster", layout="wide")
+apply_app_shell("Configuración")
 
 ALGORITHMS = ["WKMedoids", "W-Hierarchical Clustering", "W-DBSCAN"]
 
@@ -94,7 +96,6 @@ algorithm = st.radio(
 st.session_state["algoritmo"] = algorithm
 st.session_state["algoritmo_idx"] = ALGORITHMS.index(algorithm)
 
-st.markdown("---")
 st.markdown("### Parámetros manuales")
 
 params = _current_params_for(algorithm)
@@ -147,7 +148,8 @@ elif algorithm == "W-Hierarchical Clustering":
             index=linkages.index(params.get("linkage", "complete")),
         )
     with col3:
-        st.metric("Métrica de distancia", "Euclidiana ponderada")
+        st.markdown("**Métrica de distancia**")
+        st.write("Euclidiana ponderada")
     st.info(
         "La configuración canónica actual es `complete` con k=2. "
         "El cálculo automático permite contrastarla contra otros cortes.",
@@ -191,7 +193,6 @@ else:
 
 _save_active_params(algorithm, params)
 
-st.markdown("---")
 st.markdown("### Asistente de parámetros")
 st.caption(
     "La configuración manual queda guardada de inmediato. Abre el asistente solo si "
@@ -210,14 +211,12 @@ if st.button(toggle_label, type="secondary", icon=toggle_icon):
     st.rerun()
 
 if st.session_state.get("show_param_search", False):
-    with st.container(border=True):
-        panel_intro, panel_dataset = st.columns([1.6, 1])
-        with panel_intro:
-            st.markdown("#### Recomendación automática")
-            st.caption(
-                "Explora parámetros sobre una muestra reproducible del dataset procesado. "
-                "Úsalo como apoyo para guardar una configuración activa, no como ejecución final."
-            )
+    with st.container(border=True, gap="small"):
+        st.markdown("#### Recomendación automática")
+        st.caption(
+            "Explora parámetros sobre una muestra reproducible del dataset procesado. "
+            "Úsalo como apoyo para guardar una configuración activa, no como ejecución final."
+        )
 
         try:
             df_processed = load_processed_dataset()
@@ -228,12 +227,13 @@ if st.session_state.get("show_param_search", False):
             dataset_ready = False
             dataset_error = str(exc)
 
-        with panel_dataset:
-            if dataset_ready:
-                st.metric("Registros", f"{len(df_processed):,}")
-                st.metric("Variables", len(df_processed.columns))
-            else:
-                st.error(dataset_error, icon=":material/error:")
+        if dataset_ready:
+            st.caption(
+                f":material/database: Dataset disponible · "
+                f"{len(df_processed):,} registros · {len(df_processed.columns)} variables"
+            )
+        else:
+            st.error(dataset_error, icon=":material/error:")
 
         st.markdown("##### Alcance de búsqueda")
         search_cols = st.columns([1, 1, 1])
@@ -325,7 +325,9 @@ if st.session_state.get("show_param_search", False):
             st.markdown("##### Última recomendación")
             col_best, col_criterion, col_sample = st.columns([1.2, 1.4, 1])
             col_best.json(last_result["best_params"])
-            col_criterion.metric("Criterio", last_result["criterion"])
+            with col_criterion:
+                st.markdown("**Criterio**")
+                st.write(last_result["criterion"])
             col_sample.metric("Muestra evaluada", last_result["sample_size"])
 
             for note in last_result.get("notes", []):
@@ -338,13 +340,13 @@ if st.session_state.get("show_param_search", False):
                     icon=":material/warning:",
                 )
             else:
-                st.dataframe(result_table, use_container_width=True, hide_index=True)
+                st.dataframe(result_table, width="stretch", hide_index=True)
 
-st.markdown("---")
 st.markdown("### Resumen de configuración activa")
 col_alg, col_params = st.columns(2)
 with col_alg:
-    st.metric("Configuración en edición", algorithm)
+    st.markdown("**Configuración en edición**")
+    st.write(algorithm)
 with col_params:
     st.json(st.session_state["params"])
 

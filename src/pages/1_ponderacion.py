@@ -10,9 +10,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
+from src.ui import apply_app_shell
 from src.weighting.weight_manager import WeightManager
 
 st.set_page_config(page_title="Ponderación · ElectoCluster", layout="wide")
+apply_app_shell("Ponderación")
 
 st.title("Esquema de Ponderación")
 st.markdown(
@@ -24,67 +26,11 @@ st.markdown(
     """
     <style>
       .weight-change-note {
-        margin: -0.25rem 0 0.85rem;
-        padding: 0.55rem 0.65rem;
-        border: 1px solid rgba(234, 179, 8, 0.62);
-        border-radius: 8px;
-        background: rgba(234, 179, 8, 0.10);
-      }
-      .weight-change-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-        margin-bottom: 0.4rem;
-      }
-      .weight-change-badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 2px 10px;
-        border: 1px solid rgba(234, 179, 8, 0.78);
-        border-radius: 999px;
-        background: rgba(234, 179, 8, 0.15);
-        color: #fde68a;
-        font-size: 0.72rem;
-        font-weight: 800;
-      }
-      .weight-change-values {
-        display: flex;
-        justify-content: space-between;
-        gap: 0.7rem;
-        color: #cbd5e1;
-        font-size: 0.76rem;
-      }
-      .weight-trail {
-        position: relative;
-        height: 8px;
-        margin: 0.45rem 0;
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.18);
-      }
-      .weight-trail-fill {
-        position: absolute;
-        top: 0;
-        height: 8px;
-        border-radius: 999px;
-        background: linear-gradient(90deg, rgba(234, 179, 8, 0.18), rgba(234, 179, 8, 0.70));
-      }
-      .weight-point {
-        position: absolute;
-        top: 50%;
-        width: 12px;
-        height: 12px;
-        border-radius: 999px;
-        transform: translate(-50%, -50%);
-      }
-      .weight-point-original {
-        border: 2px solid rgba(203, 213, 225, 0.9);
-        background: #111827;
-      }
-      .weight-point-current {
-        border: 2px solid rgba(234, 179, 8, 0.95);
-        background: #facc15;
+        min-height: 1.15rem;
+        margin: -0.35rem 0 0.55rem;
+        color: #facc15;
+        font-size: 0.78rem;
+        line-height: 1.15rem;
       }
       .weight-unsaved-summary {
         display: inline-flex;
@@ -127,27 +73,12 @@ def _is_modified(original: float, current: float) -> bool:
 
 
 def _render_weight_change(original: float, current: float):
-    original = float(original)
-    current = float(current)
-    left = min(original, current) * 100
-    width = abs(current - original) * 100
-    original_pos = original * 100
-    current_pos = current * 100
+    original_label = escape(_format_weight(original))
+    current_label = escape(_format_weight(current))
     st.markdown(
         f"""
         <div class="weight-change-note">
-          <div class="weight-change-header">
-            <span class="weight-change-badge">Modificada</span>
-          </div>
-          <div class="weight-trail">
-            <span class="weight-trail-fill" style="left:{left:.2f}%;width:{width:.2f}%;"></span>
-            <span class="weight-point weight-point-original" title="Valor guardado" style="left:{original_pos:.2f}%;"></span>
-            <span class="weight-point weight-point-current" title="Valor actual" style="left:{current_pos:.2f}%;"></span>
-          </div>
-          <div class="weight-change-values">
-            <span>Guardado: <strong>{escape(_format_weight(original))}</strong></span>
-            <span>Actual: <strong>{escape(_format_weight(current))}</strong></span>
-          </div>
+          Sin guardar · {original_label} → <strong>{current_label}</strong>
         </div>
         """,
         unsafe_allow_html=True,
@@ -201,24 +132,25 @@ form_version = st.session_state["weights_form_version"]
 
 for grupo, variables in GRUPOS.items():
     st.markdown(f"### {grupo}")
-    cols = st.columns(3)
-    col_idx = 0
-    for var, nombre in variables.items():
-        peso_actual = weights.get(var, 0.3)
-        with cols[col_idx % 3]:
-            nuevo = st.slider(
-                label=f"{nombre}  `{var}`",
-                min_value=0.0,
-                max_value=1.0,
-                value=float(peso_actual),
-                step=0.05,
-                key=f"slider_{form_version}_{var}",
-            )
-            nuevos_pesos[var] = nuevo
-            if _is_modified(peso_actual, nuevo):
-                pesos_modificados.append((var, nombre, peso_actual, nuevo))
-                _render_weight_change(peso_actual, nuevo)
-        col_idx += 1
+    variable_items = list(variables.items())
+    for row_start in range(0, len(variable_items), 3):
+        row_cols = st.columns(3)
+        row_items = variable_items[row_start : row_start + 3]
+        for col, (var, nombre) in zip(row_cols, row_items):
+            peso_actual = weights.get(var, 0.3)
+            with col:
+                nuevo = st.slider(
+                    label=f"{nombre}  `{var}`",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=float(peso_actual),
+                    step=0.05,
+                    key=f"slider_{form_version}_{var}",
+                )
+                nuevos_pesos[var] = nuevo
+                if _is_modified(peso_actual, nuevo):
+                    pesos_modificados.append((var, nombre, peso_actual, nuevo))
+                    _render_weight_change(peso_actual, nuevo)
     st.markdown("---")
 
 if pesos_modificados:
@@ -247,7 +179,7 @@ if pesos_modificados:
         )
 
 # ── Botones de acción ─────────────────────────────────────────────────────────
-col_save, col_reset, col_export = st.columns([1, 1, 2])
+col_save, col_reset, col_export = st.columns([1, 1.4, 1.6])
 
 with col_save:
     if st.button(

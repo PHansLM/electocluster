@@ -26,6 +26,7 @@ from src.utils.constants import (
     RESULTS_PATH,
     TODAS_VARIABLES,
 )
+from src.ui import apply_app_shell
 
 
 UPLOADS_PATH = PROJECT_ROOT / "data" / "uploads"
@@ -93,7 +94,7 @@ def _render_variable_diagnostic(dataset_path: str | Path):
     with tab_present:
         st.dataframe(
             status_df[status_df["estado"] == "Presente"],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -102,14 +103,14 @@ def _render_variable_diagnostic(dataset_path: str | Path):
         if missing_df.empty:
             st.info("No hay variables base faltantes.", icon=":material/info:")
         else:
-            st.dataframe(missing_df, use_container_width=True, hide_index=True)
+            st.dataframe(missing_df, width="stretch", hide_index=True)
 
     with tab_extra:
         extras = inspection["extra_columns"]
         if extras:
             st.dataframe(
                 pd.DataFrame({"columna": extras}),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
         else:
@@ -119,6 +120,7 @@ def _render_variable_diagnostic(dataset_path: str | Path):
 
 
 st.set_page_config(page_title="Preprocesamiento · ElectoCluster", layout="wide")
+apply_app_shell("Preprocesamiento")
 
 st.title("Preprocesamiento de Datos")
 st.markdown(
@@ -131,40 +133,37 @@ st.markdown(
 st.markdown("### Estado actual del dataset")
 
 processed_path = Path(PROCESSED_DATA_PATH)
-col_status, col_info = st.columns([1, 2])
+raw_path = Path(RAW_DATA_PATH)
 
-with col_status:
-    if processed_path.exists():
-        mod_time = datetime.fromtimestamp(processed_path.stat().st_mtime)
+if processed_path.exists():
+    mod_time = datetime.fromtimestamp(processed_path.stat().st_mtime)
+    status_col, updated_col = st.columns([1.1, 1.9], vertical_alignment="center")
+    with status_col:
         st.success("Dataset procesado disponible", icon=":material/check_circle:")
+    with updated_col:
         st.caption(f"Última ejecución: {mod_time.strftime('%d/%m/%Y %H:%M')}")
-        try:
-            df_existing = pd.read_csv(processed_path)
-            st.metric("Registros", f"{len(df_existing):,}")
-            st.metric("Variables", len(df_existing.columns))
-            st.metric("Missings", df_existing.isnull().sum().sum())
-        except Exception:
-            st.warning("No se pudo leer el dataset procesado.")
-    else:
-        st.warning("No existe dataset procesado. Ejecuta el pipeline.", icon=":material/warning:")
+    try:
+        df_existing = pd.read_csv(processed_path)
+        metric_cols = st.columns(3)
+        metric_cols[0].metric("Registros", f"{len(df_existing):,}")
+        metric_cols[1].metric("Variables", len(df_existing.columns))
+        metric_cols[2].metric("Missings", df_existing.isnull().sum().sum())
+    except Exception:
+        st.warning("No se pudo leer el dataset procesado.")
+else:
+    st.warning("No existe dataset procesado. Ejecuta el pipeline.", icon=":material/warning:")
 
-with col_info:
-    raw_path = Path(RAW_DATA_PATH)
-    if raw_path.exists():
-        st.info(
-            f"Dataset crudo: `{RAW_DATA_PATH}`  \n"
-            f"Formato: Stata (.dta) · LAPOP Bolivia 2023  \n"
-            f"Registros esperados: 1,706 · Variables originales: 208",
-            icon=":material/folder_open:",
-        )
-    else:
-        st.error(
-            f"Dataset crudo no encontrado en `{RAW_DATA_PATH}`.  \n"
-            "Verifica que el archivo .dta esté en `data/raw/`.",
-            icon=":material/error:",
-        )
-
-st.markdown("---")
+if raw_path.exists():
+    st.caption(
+        f":material/folder_open: Dataset crudo: `{RAW_DATA_PATH}` · "
+        "Stata (.dta) · 1,706 registros esperados · 208 variables originales"
+    )
+else:
+    st.error(
+        f"Dataset crudo no encontrado en `{RAW_DATA_PATH}`.  \n"
+        "Verifica que el archivo .dta esté en `data/raw/`.",
+        icon=":material/error:",
+    )
 
 # ── Fuente de datos ──────────────────────────────────────────────────────────
 st.markdown("### Fuente de datos")
@@ -244,7 +243,7 @@ with st.expander("Variables seleccionadas del dataset (40 base → 28 finales)",
     })
 
     df_vars = pd.DataFrame(var_rows)
-    st.dataframe(df_vars, use_container_width=True, hide_index=True)
+    st.dataframe(df_vars, width="stretch", hide_index=True)
 
 st.markdown("---")
 
@@ -379,7 +378,7 @@ with col_run:
         "Ejecutar pipeline",
         type="primary",
         icon=":material/play_arrow:",
-        use_container_width=True,
+        width="stretch",
         disabled=not (selected_dataset_path and Path(selected_dataset_path).exists()),
     )
 
@@ -485,7 +484,7 @@ else:
                     st.markdown("**Variables con valores faltantes antes de imputación:**")
                     st.dataframe(
                         pd.DataFrame(miss_rows).sort_values("Missings", ascending=False),
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True,
                     )
 
@@ -514,7 +513,7 @@ else:
                     }
                     for var, info in outliers.items()
                 ]
-                st.dataframe(pd.DataFrame(out_rows), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(out_rows), width="stretch", hide_index=True)
                 st.caption(
                     "Los outliers se reportan pero no se eliminan. "
                     "En el contexto boliviano, hogares numerosos y edades extremas son plausibles."
@@ -576,6 +575,6 @@ else:
                 ]
                 st.dataframe(
                     pd.DataFrame(rec_rows),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )

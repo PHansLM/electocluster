@@ -22,11 +22,13 @@ from src.evaluation.execution import (
     run_clustering_experiment,
 )
 from src.evaluation.canonical_suite import run_canonical_suite
+from src.ui import apply_app_shell
 from src.visualization import cluster_distribution
 from src.weighting.weight_manager import WeightManager
 
 
 st.set_page_config(page_title="Ejecucion - ElectoCluster", layout="wide")
+apply_app_shell("Ejecución")
 
 SOURCE_ACTIVE = "Activa"
 SOURCE_CANONICAL = "Canonica"
@@ -156,7 +158,7 @@ def _render_result_summary(metrics: dict, labels, metadata: dict):
 
     st.dataframe(
         cluster_distribution(labels),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -223,60 +225,14 @@ def _execution_plan_table(selected_algorithms: list[str], sources: dict, configs
 
 def _status_badge(status: str) -> str:
     if status == "Igual":
-        colors = {
-            "background": "rgba(34, 197, 94, 0.14)",
-            "border": "rgba(34, 197, 94, 0.72)",
-            "text": "#86efac",
-        }
-    else:
-        colors = {
-            "background": "rgba(234, 179, 8, 0.15)",
-            "border": "rgba(234, 179, 8, 0.78)",
-            "text": "#fde68a",
-        }
-
-    return (
-        "<span style='"
-        "display:inline-flex;align-items:center;justify-content:center;"
-        "min-width:72px;padding:2px 10px;border-radius:999px;"
-        f"background:{colors['background']};"
-        f"border:1px solid {colors['border']};"
-        f"color:{colors['text']};"
-        "font-weight:700;font-size:0.78rem;"
-        "'>"
-        f"{escape(status)}"
-        "</span>"
-    )
+        return '<span class="comparison-status comparison-status-same">Igual</span>'
+    return '<span class="comparison-status comparison-status-diff">Difiere</span>'
 
 
 def _source_mode_badge(mode: str) -> str:
-    palettes = {
-        SOURCE_MODE_ACTIVE: {
-            "background": "rgba(234, 179, 8, 0.15)",
-            "border": "rgba(234, 179, 8, 0.78)",
-            "text": "#fde68a",
-        },
-        SOURCE_MODE_CANONICAL: {
-            "background": "rgba(34, 197, 94, 0.14)",
-            "border": "rgba(34, 197, 94, 0.72)",
-            "text": "#86efac",
-        },
-        SOURCE_MODE_CUSTOM: {
-            "background": "rgba(59, 130, 246, 0.15)",
-            "border": "rgba(59, 130, 246, 0.78)",
-            "text": "#93c5fd",
-        },
-    }
-    colors = palettes.get(mode, palettes[SOURCE_MODE_CUSTOM])
+    mode_class = "source-mode-custom" if mode == SOURCE_MODE_CUSTOM else "source-mode-neutral"
     return (
-        "<span style='"
-        "display:inline-flex;align-items:center;justify-content:center;"
-        "min-width:120px;padding:5px 14px;border-radius:999px;"
-        f"background:{colors['background']};"
-        f"border:1px solid {colors['border']};"
-        f"color:{colors['text']};"
-        "font-weight:800;font-size:1rem;"
-        "'>"
+        f'<span class="source-mode-badge {mode_class}">'
         f"{escape(mode)}"
         "</span>"
     )
@@ -295,8 +251,8 @@ def _render_config_comparison_table(comparison_table: pd.DataFrame):
         if index == 0:
             cells.append(
                 "<td rowspan='{rows}' style='"
-                "vertical-align:top;font-weight:700;color:#f8fafc;"
-                "border-right:1px solid rgba(148, 163, 184, 0.22);"
+                "vertical-align:top;font-weight:700;color:var(--text-color);"
+                "border-right:1px solid color-mix(in srgb, var(--text-color) 16%, transparent);"
                 "'>{algorithm}</td>".format(
                     rows=group_size,
                     algorithm=escape(str(algorithm_name)),
@@ -311,15 +267,15 @@ def _render_config_comparison_table(comparison_table: pd.DataFrame):
         html_rows.append("<tr>" + "".join(cells) + "</tr>")
 
     table_html = """
-    <div class="electo-comparison-table" style="overflow-x:auto;border:1px solid rgba(148, 163, 184, 0.22);border-radius:8px;">
+    <div class="electo-comparison-table">
       <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
         <thead>
-          <tr style="background:rgba(148, 163, 184, 0.10);color:#cbd5e1;">
-            <th style="text-align:left;padding:9px 10px;border-bottom:1px solid rgba(148, 163, 184, 0.24);">algoritmo</th>
-            <th style="text-align:left;padding:9px 10px;border-bottom:1px solid rgba(148, 163, 184, 0.24);">parametro</th>
-            <th style="text-align:left;padding:9px 10px;border-bottom:1px solid rgba(148, 163, 184, 0.24);">activa</th>
-            <th style="text-align:left;padding:9px 10px;border-bottom:1px solid rgba(148, 163, 184, 0.24);">canonica</th>
-            <th style="text-align:left;padding:9px 10px;border-bottom:1px solid rgba(148, 163, 184, 0.24);">estado</th>
+          <tr>
+            <th>algoritmo</th>
+            <th>parametro</th>
+            <th>activa</th>
+            <th>canonica</th>
+            <th>estado</th>
           </tr>
         </thead>
         <tbody>
@@ -328,12 +284,55 @@ def _render_config_comparison_table(comparison_table: pd.DataFrame):
       </table>
     </div>
     <style>
+      .electo-comparison-table {{
+        overflow-x: auto;
+        border: 1px solid color-mix(in srgb, var(--text-color) 16%, transparent);
+        border-radius: 8px;
+      }}
+      .electo-comparison-table th {{
+        padding: 8px 10px;
+        text-align: left;
+        color: var(--text-color);
+        background: var(--secondary-background-color);
+        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+      }}
       .electo-comparison-table td {{
-        padding: 9px 10px;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        padding: 7px 10px;
+        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 10%, transparent);
       }}
       .electo-comparison-table tbody tr:last-child td {{
         border-bottom: none;
+      }}
+      .comparison-status {{
+        display: inline-block;
+        font-size: 0.78rem;
+      }}
+      .comparison-status-same {{
+        color: color-mix(in srgb, var(--text-color) 58%, transparent);
+      }}
+      .comparison-status-diff {{
+        padding: 1px 7px;
+        border: 1px solid color-mix(in srgb, #eab308 58%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, #eab308 12%, transparent);
+        color: var(--text-color);
+        font-weight: 650;
+      }}
+      .source-mode-badge {{
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.84rem;
+        font-weight: 650;
+      }}
+      .source-mode-neutral {{
+        border: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+        color: color-mix(in srgb, var(--text-color) 72%, transparent);
+      }}
+      .source-mode-custom {{
+        border: 1px solid color-mix(in srgb, var(--primary-color) 48%, transparent);
+        background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+        color: var(--text-color);
       }}
     </style>
     """.format(rows="".join(html_rows))
@@ -341,18 +340,13 @@ def _render_config_comparison_table(comparison_table: pd.DataFrame):
 
 
 st.markdown("### Dataset activo")
-col_rows, col_columns, col_configs = st.columns(3)
-with col_rows:
-    st.metric("Registros", f"{shape[0]:,}")
-with col_columns:
-    st.metric("Variables", len(columns))
-with col_configs:
-    st.metric("Configuraciones activas", len(active_configs))
+st.caption(
+    f"**{shape[0]:,}** registros · **{len(columns)}** variables · "
+    f"**{len(active_configs)}** configuraciones activas"
+)
 
 with st.expander("Vista previa del dataset procesado", expanded=False):
-    st.dataframe(preview, use_container_width=True, hide_index=True)
-
-st.markdown("---")
+    st.dataframe(preview, width="stretch", hide_index=True)
 
 algorithm_options = [config_algorithm for config_algorithm, _ in canonical_experiments()]
 
@@ -370,15 +364,10 @@ comparison_table = _config_comparison_table(active_configs, comparison_view)
 diff_count = int((comparison_table["estado"] == "Difiere").sum())
 same_count = int((comparison_table["estado"] == "Igual").sum())
 
-metric_diff, metric_same = st.columns(2)
-with metric_diff:
-    st.metric("Diferencias", diff_count)
-with metric_same:
-    st.metric("Coincidencias", same_count)
+st.caption(f"Comparación: **{diff_count} diferencias** · {same_count} coincidencias")
 
 _render_config_comparison_table(comparison_table)
 
-st.markdown("---")
 st.markdown("### Plan de ejecucion")
 st.caption(
     "Activa usa lo guardado desde Configuracion. Canonica usa los parametros finales "
@@ -401,7 +390,11 @@ if bulk_canonical.button("Usar canonicas en todos", icon=":material/rule:"):
         st.session_state[f"source_{_state_key(option)}"] = SOURCE_CANONICAL
     st.rerun()
 
-header_exec, header_algo, header_source = st.columns([0.8, 1.5, 1.7])
+header_exec, header_algo, header_source = st.columns(
+    [0.8, 1.5, 1.7],
+    vertical_alignment="center",
+    gap="small",
+)
 header_exec.caption("Ejecutar")
 header_algo.caption("Algoritmo")
 header_source.caption("Fuente de parametros")
@@ -410,7 +403,11 @@ sources = {}
 selected_algorithms = []
 for option in algorithm_options:
     slug = _state_key(option)
-    col_exec, col_algo, col_source = st.columns([0.8, 1.5, 1.7])
+    col_exec, col_algo, col_source = st.columns(
+        [0.8, 1.5, 1.7],
+        vertical_alignment="center",
+        gap="small",
+    )
     with col_exec:
         execute = st.toggle(
             "Ejecutar",
@@ -432,19 +429,20 @@ for option in algorithm_options:
     if execute:
         selected_algorithms.append(option)
 
-mode_col, count_col = st.columns(2)
+mode_col, count_col = st.columns(2, vertical_alignment="center")
 with mode_col:
     source_mode = _source_mode(sources, algorithm_options)
     st.caption("Estado de fuentes")
     st.markdown(_source_mode_badge(source_mode), unsafe_allow_html=True)
 with count_col:
-    st.metric("Algoritmos seleccionados", len(selected_algorithms))
+    st.caption("Selección")
+    st.markdown(f"**{len(selected_algorithms)} de {len(algorithm_options)} algoritmos**")
 
 if selected_algorithms:
     st.markdown("#### Plan resultante")
     st.dataframe(
         _execution_plan_table(selected_algorithms, sources, active_configs),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 else:
@@ -454,7 +452,7 @@ run_clicked = st.button(
     "Ejecutar seleccion",
     type="primary",
     icon=":material/play_arrow:",
-    use_container_width=True,
+    width="stretch",
     disabled=not selected_algorithms,
 )
 
@@ -526,7 +524,7 @@ if run_clicked:
     st.session_state["last_run_id"] = run_ids[-1] if run_ids else None
     if not is_complete_canonical_suite:
         st.success("Ejecucion completada.")
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
     if len(run_ids) == 1 and last_result is not None:
         _render_result_summary(last_result.metrics, last_result.labels, last_result.metadata)
