@@ -69,7 +69,21 @@ def _display_search_result(result):
     result_dict = asdict(result)
     st.session_state["last_param_search"] = result_dict
     st.session_state["last_param_search_algorithm"] = result.algorithm
-    _save_active_params(result.algorithm, result.best_params)
+
+
+def _parameter_comparison(recommended: dict, canonical: dict) -> pd.DataFrame:
+    """Compara una recomendacion exploratoria con la referencia canonica."""
+    rows = []
+    for key in canonical:
+        recommended_value = recommended.get(key)
+        canonical_value = canonical[key]
+        rows.append({
+            "Parámetro": key,
+            "Recomendación": recommended_value,
+            "Canónica": canonical_value,
+            "Estado": "Coincide" if recommended_value == canonical_value else "Difiere",
+        })
+    return pd.DataFrame(rows)
 
 
 def _format_results_table(rows: list[dict]) -> pd.DataFrame:
@@ -198,14 +212,18 @@ st.divider()
 st.markdown("### Asistente de parámetros")
 st.caption(
     "La configuración manual queda guardada de inmediato. Abre el asistente solo si "
-    "quieres calcular una recomendación automática para este algoritmo."
+    "quieres calcular una recomendación exploratoria para este algoritmo."
 )
+
+flash_message = st.session_state.pop("parameter_assistant_flash", None)
+if flash_message:
+    st.success(flash_message, icon=":material/check_circle:")
 
 show_param_search = st.session_state.get("show_param_search", False)
 toggle_label = (
-    "Ocultar cálculo automático"
+    "Ocultar exploración rápida"
     if show_param_search
-    else "Abrir cálculo automático"
+    else "Abrir exploración rápida"
 )
 toggle_icon = ":material/close:" if show_param_search else ":material/tune:"
 if st.button(toggle_label, type="secondary", icon=toggle_icon):
@@ -214,10 +232,38 @@ if st.button(toggle_label, type="secondary", icon=toggle_icon):
 
 if st.session_state.get("show_param_search", False):
     with st.container(border=True, gap="small"):
-        st.markdown("#### Recomendación automática")
+        st.markdown("#### Exploración rápida")
         st.caption(
             "Explora parámetros sobre una muestra reproducible del dataset procesado. "
-            "Úsalo como apoyo para guardar una configuración activa, no como ejecución final."
+            "El resultado es orientativo y no reproduce la búsqueda exhaustiva con la que "
+            "se definió la batería canónica."
+        )
+
+        canonical_params = default_params(algorithm)
+        canonical_col, canonical_action = st.columns([1.5, 1])
+        with canonical_col:
+            st.markdown("**Referencia canónica validada**")
+            st.json(canonical_params)
+        with canonical_action:
+            st.caption(
+                "Restaura estos valores si necesitas ejecutar o demostrar la batería "
+                "canónica reproducible."
+            )
+            if st.button(
+                "Restaurar configuración canónica",
+                icon=":material/restore:",
+                key=f"restore_canonical_{algorithm}",
+            ):
+                _save_active_params(algorithm, canonical_params)
+                st.session_state["parameter_assistant_flash"] = (
+                    f"Configuración canónica restaurada para {algorithm}."
+                )
+                st.rerun()
+
+        st.info(
+            "Calcular una recomendación no cambiará la configuración activa. Podrás "
+            "compararla y aplicarla explícitamente después.",
+            icon=":material/info:",
         )
 
         try:
@@ -241,13 +287,17 @@ if st.session_state.get("show_param_search", False):
         search_cols = st.columns([1, 1, 1])
         with search_cols[0]:
             sample_default = 500 if algorithm == "W-DBSCAN" else 300
+            sample_max = max(100, len(df_processed)) if dataset_ready else 1000
             sample_size = st.number_input(
                 "Tamaño de muestra",
                 min_value=100,
-                max_value=1000,
-                value=sample_default,
+                max_value=sample_max,
+                value=min(sample_default, sample_max),
                 step=50,
-                help="Usa una muestra menor si el equipo tiene poca memoria disponible.",
+                help=(
+                    "Usa una muestra menor si el equipo tiene poca memoria. El dataset "
+                    "completo ofrece resultados más comparables, pero tarda más."
+                ),
             )
         with search_cols[1]:
             random_state = st.number_input(
@@ -259,8 +309,15 @@ if st.session_state.get("show_param_search", False):
 
         if algorithm in ["WKMedoids", "W-Hierarchical Clustering"]:
             with search_cols[2]:
-                k_min = st.number_input("k mínimo", min_value=2, max_value=20, value=2)
-            k_max = st.slider("k máximo a explorar", min_value=int(k_min), max_value=20, value=8)
+                k_min = st.number_input("k mínimo", min_value=2, max_value=24, value=2)
+            canonical_k = int(canonical_params["n_clusters"])
+            k_max = st.slider(
+                "k máximo a explorar",
+                min_value=int(k_min),
+                max_value=24,
+                value=max(int(k_min), 8, canonical_k),
+                help="El rango inicial incluye el k canónico para evitar excluirlo por omisión.",
+            )
             k_values = list(range(int(k_min), int(k_max) + 1))
             variance_target = None
         else:
@@ -269,8 +326,9 @@ if st.session_state.get("show_param_search", False):
                     "Varianza PCA objetivo",
                     min_value=0.60,
                     max_value=0.95,
-                    value=0.85,
+                    value=0.90,
                     step=0.05,
+                    help="La batería canónica se estableció con un objetivo de 0.90.",
                 )
             k_values = []
 
@@ -331,6 +389,35 @@ if st.session_state.get("show_param_search", False):
                 st.markdown("**Criterio**")
                 st.write(last_result["criterion"])
             col_sample.metric("Muestra evaluada", last_result["sample_size"])
+
+            comparison = _parameter_comparison(
+                last_result["best_params"],
+                canonical_params,
+            )
+            if (comparison["Estado"] == "Coincide").all():
+                st.success(
+                    "La recomendación coincide con la configuración canónica.",
+                    icon=":material/check_circle:",
+                )
+            else:
+                st.warning(
+                    "La recomendación difiere de la referencia canónica. Esto es esperable "
+                    "en una exploración por muestra; aplícala solo si quieres probar una "
+                    "configuración alternativa.",
+                    icon=":material/warning:",
+                )
+            st.dataframe(comparison, width="stretch", hide_index=True)
+
+            if st.button(
+                "Aplicar esta recomendación",
+                icon=":material/check:",
+                key=f"apply_recommendation_{algorithm}",
+            ):
+                _save_active_params(algorithm, last_result["best_params"])
+                st.session_state["parameter_assistant_flash"] = (
+                    f"Recomendación aplicada a {algorithm}."
+                )
+                st.rerun()
 
             for note in last_result.get("notes", []):
                 st.caption(note)

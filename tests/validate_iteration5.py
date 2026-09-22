@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import gc
 import importlib
@@ -140,6 +141,9 @@ def run_quick_checks() -> None:
     print("[quick] Checking canonical suite evidence contract")
     _check_canonical_suite()
 
+    print("[quick] Checking parameter assistant safety contract")
+    _check_parameter_assistant_safety()
+
     print("[quick] Checking additive semantic cluster profiles")
     _check_semantic_profiles()
 
@@ -155,6 +159,32 @@ def run_quick_checks() -> None:
         for key in ("silhouette", "davies_bouldin", "calinski_harabasz"):
             assert key in metrics, f"{path.name} is missing metric key {key}."
     assert {"WKMedoids", "W-Hierarchical Clustering", "W-DBSCAN"} <= algorithms
+
+
+def _check_parameter_assistant_safety() -> None:
+    """Evita que una recomendacion exploratoria vuelva a aplicarse sin confirmacion."""
+    page_path = PROJECT_ROOT / "src" / "pages" / "2_configuracion.py"
+    source = page_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(page_path))
+
+    display_function = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_display_search_result"
+    )
+    called_names = {
+        node.func.id
+        for node in ast.walk(display_function)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+    assert "_save_active_params" not in called_names, (
+        "La recomendacion exploratoria no debe modificar parametros automaticamente."
+    )
+    assert "Aplicar esta recomendación" in source
+    assert "Restaurar configuración canónica" in source
+    assert 'value=0.90' in source
+    assert 'max_value=24' in source
 
 
 def _check_provenance() -> None:
@@ -1017,6 +1047,48 @@ def run_streamlit_checks() -> None:
         app = AppTest.from_file(str(PROJECT_ROOT / page))
         app.run(timeout=20)
         assert not app.exception, f"{page} raised Streamlit exceptions: {app.exception}"
+
+        if page == "src/pages/2_configuracion.py":
+            open_assistant = next(
+                button
+                for button in app.button
+                if button.label == "Abrir exploración rápida"
+            )
+            open_assistant.click().run(timeout=20)
+            assert not app.exception
+
+            active_before_search = dict(
+                app.session_state["params_by_algorithm"]["WKMedoids"]
+            )
+            calculate = next(
+                button
+                for button in app.button
+                if button.label == "Calcular recomendación"
+            )
+            calculate.click().run(timeout=30)
+            assert not app.exception
+            assert app.session_state["params_by_algorithm"]["WKMedoids"] == (
+                active_before_search
+            ), "La exploracion rapida modifico la configuracion activa."
+            assert any(
+                button.label == "Aplicar esta recomendación"
+                for button in app.button
+            )
+
+            app.session_state["params_by_algorithm"]["WKMedoids"] = {
+                "n_clusters": 2,
+                "random_state": 7,
+            }
+            restore = next(
+                button
+                for button in app.button
+                if button.label == "Restaurar configuración canónica"
+            )
+            restore.click().run(timeout=20)
+            assert app.session_state["params_by_algorithm"]["WKMedoids"] == {
+                "n_clusters": 13,
+                "random_state": 42,
+            }
 
         if page == "src/pages/4_resultados.py":
             tab_labels = [tab.label for tab in app.tabs]
