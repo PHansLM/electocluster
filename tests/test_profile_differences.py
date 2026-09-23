@@ -7,7 +7,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pandas as pd
 from src.visualization.semantic_profiles import cluster_semantic_profiles
 from src.visualization.plotly_config import HEATMAP_PLOT_CONFIG_ES, PLOT_CONFIG_ES
-from src.visualization.profile_differences import profile_difference_rows, difference_heatmap
+from src.visualization.profile_differences import (
+    cluster_difference_summaries,
+    difference_heatmap,
+    pair_difference_details,
+    pair_difference_summaries,
+    profile_difference_rows,
+)
 
 
 class ProfileDifferencesTest(unittest.TestCase):
@@ -50,6 +56,44 @@ class ProfileDifferencesTest(unittest.TestCase):
         self.assertTrue(fig.layout.yaxis.fixedrange)
         self.assertFalse(fig.layout.dragmode)
         self.assertEqual(fig.data[0].zmin, -fig.data[0].zmax)
+
+    def test_tooltip_summaries_preserve_semantic_units(self):
+        data = pd.DataFrame({"ur": [1, 1, 0, 0]})
+        rows = profile_difference_rows(cluster_semantic_profiles(data, [0, 0, 1, 1]))
+
+        clusters = cluster_difference_summaries(rows)
+        pairs = pair_difference_summaries(rows)
+
+        self.assertIn("puntos porcentuales", clusters[0])
+        self.assertIn("Grupo 0", pairs[(0, 1)])
+        self.assertIn("Grupo 1", pairs[(0, 1)])
+
+    def test_practical_readings_respect_feature_type(self):
+        data = pd.DataFrame({
+            "q10e": [0.0, 0.0, 1.0, 1.0],
+            "ur": [1.0, 1.0, 0.0, 0.0],
+        })
+        rows = profile_difference_rows(cluster_semantic_profiles(data, [0, 0, 1, 1]))
+
+        ordinal = rows[(rows.feature == "q10e") & (rows.cluster_id == 0)].iloc[0]
+        binary = rows[(rows.feature == "ur") & (rows.cluster_id == 0)].iloc[0]
+
+        self.assertEqual(ordinal.practical_value, "Mediana: Aumentó")
+        self.assertIn("Urbano", binary.practical_value)
+        self.assertNotIn("más cercano", ordinal.practical_value.lower())
+
+    def test_pair_detail_has_relative_intensity_scale(self):
+        data = pd.DataFrame({
+            "q10e": [0.0, 0.0, 1.0, 1.0],
+            "ur": [1.0, 1.0, 0.0, 0.0],
+        })
+        rows = profile_difference_rows(cluster_semantic_profiles(data, [0, 0, 1, 1]))
+        detail = pair_difference_details(rows, 0, 1)
+
+        self.assertFalse(detail.empty)
+        self.assertAlmostEqual(detail.intensidad.max(), 100.0)
+        self.assertIn("Grupo 0", detail.columns)
+        self.assertIn("Grupo 1", detail.columns)
 
 
 if __name__ == "__main__":

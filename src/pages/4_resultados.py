@@ -13,8 +13,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from src.evaluation.execution import load_processed_dataset
@@ -31,7 +33,13 @@ from src.visualization.plotly_config import (
     apply_plotly_theme,
     cluster_color_map,
 )
-from src.visualization.profile_differences import difference_heatmap, profile_difference_rows
+from src.visualization.profile_differences import (
+    cluster_difference_summaries,
+    difference_heatmap,
+    pair_difference_details,
+    pair_difference_summaries,
+    profile_difference_rows,
+)
 from src.visualization import (
     PROFILE_METADATA_COLUMNS,
     build_semantic_profile_export,
@@ -122,6 +130,173 @@ def _comparison_label(row: pd.Series) -> str:
     timestamp = row["timestamp"]
     stamp = timestamp.strftime("%d/%m %H:%M") if pd.notna(timestamp) else "sin fecha"
     return f"{row['algorithm']} | {stamp}"
+
+
+def _dimension_detail(feature_codes: str) -> str:
+    codes = [code.strip() for code in str(feature_codes).split(",") if code.strip()]
+    return ", ".join(feature_display_name(code) for code in codes)
+
+
+def _dimension_reading(row: pd.Series) -> str:
+    deviation = float(row["deviation"])
+    if abs(deviation) < 1e-9:
+        direction = "igual a la referencia"
+    else:
+        direction = "por encima" if deviation > 0 else "por debajo"
+    return (
+        f"{abs(deviation):.3f} {direction} · grupo {float(row['cluster_value']):.3f} "
+        f"frente a {float(row['global_value']):.3f} global"
+    )
+
+
+def _dimension_difference_percentage(row: pd.Series) -> float:
+    reference = float(row["global_value"])
+    if abs(reference) < 1e-12:
+        return float("nan")
+    return float(row["deviation"]) / abs(reference) * 100
+
+
+def _render_feature_explanation_table(feature_rows: pd.DataFrame) -> None:
+    """Muestra una referencia común dentro de la tabla sin repetirla por grupo."""
+    rows = feature_rows.sort_values("cluster_id")
+    rowspan = len(rows)
+    body = []
+    for index, row in enumerate(rows.itertuples()):
+        reference_cell = ""
+        if index == 0:
+            reference_cell = (
+                f"<td rowspan='{rowspan}' class='merged-reference'>"
+                f"{escape(str(row.practical_reference))}</td>"
+            )
+        intensity = float(row.intensity)
+        body.append(
+            "<tr>"
+            f"<td>Grupo {escape(str(row.cluster_id))}</td>"
+            f"<td>{escape(str(row.practical_value))}</td>"
+            + reference_cell
+            + f"<td>{escape(str(row.reading))}</td>"
+            + (
+                "<td class='intensity-cell'>"
+                f"<span>{intensity:.1f}%</span>"
+                "<span class='intensity-track'>"
+                f"<span style='width:{max(0.0, min(100.0, intensity)):.1f}%'></span>"
+                "</span></td>"
+            )
+            + "</tr>"
+        )
+
+    html = """
+    <div class="merged-table-wrap">
+      <table class="merged-table feature-explanation-table">
+        <thead><tr>
+          <th>Grupo</th><th>Perfil del grupo</th><th>Referencia común</th>
+          <th>Diferencia</th><th>Intensidad</th>
+        </tr></thead>
+        <tbody>{body}</tbody>
+      </table>
+    </div>
+    {styles}
+    """.format(body="".join(body), styles=_merged_table_styles())
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def _render_dimension_section_table(dimension_rows: pd.DataFrame) -> None:
+    """Muestra una dimensión manteniendo su referencia global como celda fusionada."""
+    rows = dimension_rows.sort_values("cluster_id")
+    rowspan = len(rows)
+    body = []
+    for index, row in enumerate(rows.itertuples()):
+        reference_cell = ""
+        if index == 0:
+            reference_cell = (
+                f"<td rowspan='{rowspan}' class='merged-reference number'>"
+                f"{float(row.global_value):.3f}</td>"
+            )
+        percentage = float(row.difference_percentage)
+        percentage_text = (
+            "N/A" if not np.isfinite(percentage) else f"{percentage:+.1f}%"
+        )
+        body.append(
+            "<tr>"
+            f"<td>Grupo {escape(str(row.cluster))}</td>"
+            + reference_cell
+            + f"<td class='number'>{float(row.cluster_value):.3f}</td>"
+            + (
+                "<td class='number difference'>"
+                f"{float(row.deviation):+.3f} <span>({escape(percentage_text)})</span>"
+                "</td>"
+            )
+            + "</tr>"
+        )
+
+    html = """
+    <div class="merged-table-wrap">
+      <table class="merged-table dimension-section-table">
+        <thead><tr>
+          <th>Grupo</th><th>Referencia global</th>
+          <th>Valor del grupo</th><th>Diferencia</th>
+        </tr></thead>
+        <tbody>{body}</tbody>
+      </table>
+    </div>
+    {styles}
+    """.format(body="".join(body), styles=_merged_table_styles())
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def _merged_table_styles() -> str:
+    return """
+    <style>
+      .merged-table-wrap {
+        overflow-x: auto;
+        border: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+        border-radius: 8px;
+        background: var(--background-color);
+      }
+      .merged-table {
+        width: 100%; border-collapse: collapse; table-layout: fixed;
+        font-size: 0.86rem;
+      }
+      .merged-table th {
+        padding: 8px; text-align: left;
+        background: var(--secondary-background-color); color: var(--text-color);
+        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 22%, transparent);
+      }
+      .merged-table td {
+        padding: 8px; vertical-align: middle;
+        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
+        border-right: 1px solid color-mix(in srgb, var(--text-color) 10%, transparent);
+      }
+      .merged-table tbody tr:nth-child(even) td:not([rowspan]) {
+        background: color-mix(in srgb, var(--secondary-background-color) 45%, transparent);
+      }
+      .merged-table .merged-reference {
+        vertical-align: top; padding-top: 11px; font-weight: 600;
+        background: color-mix(in srgb, var(--secondary-background-color) 72%, transparent);
+      }
+      .merged-table .number {
+        text-align: right; font-variant-numeric: tabular-nums;
+      }
+      .merged-table .difference { white-space: nowrap; }
+      .merged-table .difference span { opacity: 0.72; }
+      .feature-explanation-table th:nth-child(1) { width: 9%; }
+      .feature-explanation-table th:nth-child(2) { width: 20%; }
+      .feature-explanation-table th:nth-child(3) { width: 20%; }
+      .feature-explanation-table th:nth-child(4) { width: 36%; }
+      .feature-explanation-table th:nth-child(5) { width: 15%; }
+      .dimension-section-table th { width: 25%; }
+      .intensity-cell { font-variant-numeric: tabular-nums; }
+      .intensity-track {
+        display: block; height: 5px; margin-top: 5px; overflow: hidden;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--text-color) 12%, transparent);
+      }
+      .intensity-track > span {
+        display: block; height: 100%; border-radius: inherit;
+        background: var(--primary-color);
+      }
+    </style>
+    """
 
 
 def _format_profile_raw(value) -> str:
@@ -592,30 +767,41 @@ projection = pca_projection(df, labels)
 profile_distances = cluster_profile_distance_matrix(df, labels)
 dimension_scores = cluster_dimension_scores(df, labels)
 semantic_profiles = cluster_semantic_profiles(df, labels)
+semantic_differences = profile_difference_rows(semantic_profiles)
+cluster_summaries = cluster_difference_summaries(semantic_differences)
 
 (
-    tab_dist,
-    tab_profile_analysis,
-    tab_deviation,
+    tab_summary,
+    tab_differences,
     tab_distances,
     tab_dimensions,
-    tab_heatmap,
-    tab_projection,
     tab_compare,
 ) = st.tabs(
     [
-        "Distribucion",
-        "Analisis de perfiles",
+        "Resumen y perfiles",
         "Diferencias",
         "Distancias",
         "Dimensiones",
-        "Heatmap semántico",
-        "PCA 2D",
-        "Comparacion",
-    ]
+        "Comparación",
+    ],
+    key="results_main_view",
+    on_change="rerun",
 )
 
+with tab_summary:
+    tab_dist, tab_profile_analysis, tab_projection = st.tabs(
+        ["Resumen de grupos", "Detalle semántico", "Proyección PCA"]
+    )
+
+with tab_differences:
+    tab_heatmap, tab_deviation = st.tabs(["Vista relativa", "Magnitudes reales"])
+
 with tab_dist:
+    distribution["semantic_summary"] = distribution["cluster_id"].map(
+        lambda cluster_id: cluster_summaries.get(
+            int(cluster_id), "Observaciones no asignadas" if int(cluster_id) < 0 else "Sin resumen disponible"
+        )
+    )
     fig_dist = px.bar(
         distribution,
         x="cluster",
@@ -623,10 +809,18 @@ with tab_dist:
         color="cluster",
         color_discrete_map=cluster_color_map(distribution["cluster"]),
         text="percentage",
+        custom_data=["semantic_summary"],
         labels={"cluster": "Cluster", "size": "Registros"},
         title="Distribucion de registros por cluster",
     )
-    fig_dist.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+    fig_dist.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="outside",
+        hovertemplate=(
+            "<b>%{x}</b><br>Registros: %{y}<br>Proporción: %{text:.1f}%<br>"
+            "%{customdata[0]}<extra></extra>"
+        ),
+    )
     fig_dist.update_layout(showlegend=False)
     apply_plotly_theme(
         fig_dist, ACTIVE_THEME, margin={"l": 20, "r": 20, "t": 55, "b": 45}
@@ -640,7 +834,52 @@ with tab_dist:
     if profiles.empty:
         st.warning("No hay perfiles disponibles para este run.")
     else:
-        _render_profiles_table(profiles)
+        profile_cluster_options = profiles["cluster"].tolist()
+        profile_feature_options = [
+            column for column in profiles.columns
+            if column not in PROFILE_METADATA_COLUMNS
+        ]
+        with st.popover(
+            "Configurar tabla",
+            icon=":material/tune:",
+            help="Agrega u oculta grupos y características en la tabla de perfiles.",
+        ):
+            st.caption(
+                "La selección solo cambia la vista. La descarga conserva el perfil completo."
+            )
+            selected_profile_clusters = st.multiselect(
+                "Grupos visibles",
+                options=profile_cluster_options,
+                default=profile_cluster_options[: min(6, len(profile_cluster_options))],
+                format_func=lambda value: f"Grupo {int(value)}",
+                key=f"profile_clusters_{selected_run_id}",
+            )
+            selected_profile_features = st.multiselect(
+                "Características visibles",
+                options=profile_feature_options,
+                default=profile_feature_options[: min(8, len(profile_feature_options))],
+                format_func=feature_display_name,
+                key=f"profile_features_{selected_run_id}",
+            )
+        st.caption(
+            f"Mostrando {len(selected_profile_clusters)} grupos y "
+            f"{len(selected_profile_features)} características."
+        )
+        if not selected_profile_clusters or not selected_profile_features:
+            st.warning(
+                "Selecciona al menos un grupo y una característica en Configurar tabla."
+            )
+        else:
+            visible_profiles = profiles[
+                profiles["cluster"].isin(selected_profile_clusters)
+            ][
+                [
+                    column for column in profiles.columns
+                    if column in PROFILE_METADATA_COLUMNS
+                    or column in selected_profile_features
+                ]
+            ]
+            _render_profiles_table(visible_profiles)
         csv = profiles.to_csv(index=False).encode("utf-8")
     profile_export_col, figure_export_col = st.columns(2)
     with profile_export_col:
@@ -675,14 +914,25 @@ with tab_projection:
         "Proyeccion de apoyo. En 28 variables, la interpretacion principal debe "
         "venir de perfiles, diferencias y distancias entre perfiles."
     )
+    projection["semantic_summary"] = projection["cluster_id"].map(
+        lambda cluster_id: cluster_summaries.get(
+            int(cluster_id), "Observaciones no asignadas" if int(cluster_id) < 0 else "Sin resumen disponible"
+        )
+    )
     fig_projection = px.scatter(
         projection,
         x="PC1",
         y="PC2",
         color="cluster",
         color_discrete_map=cluster_color_map(projection["cluster"]),
-        hover_data=["cluster_id"],
+        custom_data=["cluster_id", "semantic_summary"],
         title="Proyeccion PCA 2D de clusters",
+    )
+    fig_projection.update_traces(
+        hovertemplate=(
+            "<b>%{fullData.name}</b><br>Componente 1: %{x:.3f}<br>"
+            "Componente 2: %{y:.3f}<br>%{customdata[1]}<extra></extra>"
+        )
     )
     apply_plotly_theme(
         fig_projection, ACTIVE_THEME, margin={"l": 25, "r": 20, "t": 55, "b": 45}
@@ -712,8 +962,9 @@ with tab_heatmap:
             "por una celda o consulta la explicación debajo."
         )
         semantic_codes = heatmap.features["feature_code"].tolist()
-        semantic_rows = profile_difference_rows(semantic_profiles)
+        semantic_rows = semantic_differences.copy()
         semantic_rows = semantic_rows[semantic_rows.feature.isin(semantic_codes)].copy()
+        semantic_rows["raw_deviation"] = semantic_rows["deviation"]
         semantic_rows["deviation"] = [
             heatmap.matrix.loc[f"Cluster {int(row.cluster_id)}", row.feature]
             for row in semantic_rows.itertuples()
@@ -734,11 +985,13 @@ with tab_heatmap:
             "Característica para explicar", options=semantic_codes,
             format_func=feature_display_name, key="semantic_map_feature",
         )
-        for row in semantic_rows[semantic_rows.feature == semantic_feature].itertuples():
-            st.write(
-                f"**{row.group}:** {row.reading.lower()}. "
-                f"{row.detail}: {row.value}, frente a {row.reference} en la referencia."
-            )
+        feature_explanation = semantic_rows[
+            semantic_rows.feature == semantic_feature
+        ].sort_values("cluster_id").copy()
+        feature_explanation["intensity"] = (
+            feature_explanation["deviation"].abs() * 100
+        )
+        _render_feature_explanation_table(feature_explanation)
         with st.expander("Ejemplo de lectura y detalles del cálculo"):
             st.write(
                 "Ejemplo ilustrativo: si una característica aparece en el 60 % de un grupo "
@@ -757,7 +1010,7 @@ with tab_heatmap:
                 st.write(
                     "Aquí se omiten categorías sin orden, como religión u ocupación, porque "
                     "sus códigos no indican más o menos. Sus porcentajes pueden consultarse "
-                    "en Análisis de perfiles y Diferencias. Variables omitidas: "
+                    "en Detalle semántico y Magnitudes reales. Variables omitidas: "
                     + ", ".join(feature_display_name(code)
                                 for code in heatmap.excluded_nominal_features) + "."
                 )
@@ -981,7 +1234,7 @@ with tab_deviation:
         "Un color más intenso indica una diferencia mayor; no significa un resultado mejor o peor. "
         "Pasa el cursor por una celda para ver el valor del grupo, la referencia y una explicación."
     )
-    differences = profile_difference_rows(semantic_profiles)
+    differences = semantic_differences
     if differences.empty:
         st.warning("No hay diferencias de perfil disponibles para este run.")
     else:
@@ -1026,19 +1279,64 @@ with tab_deviation:
         explained = differences[differences.group == group].copy()
         explained["magnitude"] = explained.deviation.abs()
         explained = explained.sort_values("magnitude", ascending=False)
-        for _, item in explained.head(3).iterrows():
-            st.markdown(
-                f"**{item['variable']}** — {item['reading']}. "
-                f"{item['detail']}: **{item['value']}** en el grupo frente a "
-                f"**{item['reference']}** en la referencia."
-            )
+        top_feature_option = st.segmented_control(
+            "Características a detallar",
+            options=["3", "5", "10", "Todas"],
+            default="5",
+            key="explained_feature_count",
+        )
+        detail_count = (
+            len(explained)
+            if top_feature_option == "Todas"
+            else int(top_feature_option)
+        )
+        explained = explained.head(detail_count).copy()
+        largest_magnitude = float(explained["magnitude"].max()) if not explained.empty else 0.0
+        explained["separation"] = (
+            explained["magnitude"] / largest_magnitude * 100
+            if largest_magnitude
+            else 0.0
+        )
+        explained.insert(0, "rank", range(1, len(explained) + 1))
         st.dataframe(
-            explained[["variable", "reading", "detail", "value", "reference"]].rename(columns={
-                "variable": "Variable", "detail": "Qué se compara", "value": "En el grupo",
-                "reference": "Referencia", "reading": "Cómo interpretarlo",
+            explained[
+                [
+                    "rank",
+                    "variable",
+                    "practical_value",
+                    "practical_reference",
+                    "value",
+                    "reference",
+                    "reading",
+                    "separation",
+                ]
+            ].rename(columns={
+                "rank": "Posición",
+                "variable": "Variable",
+                "practical_value": "Perfil práctico del grupo",
+                "practical_reference": "Perfil práctico de referencia",
+                "value": "Valor del grupo",
+                "reference": "Valor de referencia",
+                "reading": "Diferencia técnica",
+                "separation": "Separación relativa",
             }),
             width="stretch",
             hide_index=True,
+            column_config={
+                "Posición": st.column_config.NumberColumn(width="small"),
+                "Variable": st.column_config.TextColumn(pinned=True, width="medium"),
+                "Perfil práctico del grupo": st.column_config.TextColumn(width="large"),
+                "Perfil práctico de referencia": st.column_config.TextColumn(width="large"),
+                "Separación relativa": st.column_config.ProgressColumn(
+                    help=(
+                        "Contraste normalizado dentro del grupo seleccionado; no es el "
+                        "peso de la variable en el algoritmo."
+                    ),
+                    min_value=0,
+                    max_value=100,
+                    format="%.0f %",
+                ),
+            },
         )
 
 with tab_distances:
@@ -1051,16 +1349,19 @@ with tab_distances:
     st.info(
         "Azul claro y número menor: perfiles más parecidos. Azul oscuro y número mayor: "
         "perfiles más diferentes. La diagonal vale cero porque compara cada grupo consigo "
-        "mismo; las dos mitades del mapa repiten las mismas comparaciones."
+        "mismo. Solo se muestra la mitad inferior del mapa para no repetir comparaciones."
     )
     if profile_distances.empty:
         st.warning("No hay distancias entre perfiles disponibles para este run.")
     else:
+        pair_summaries = pair_difference_summaries(semantic_differences)
         distance_display = profile_distances.rename(
             index=lambda value: f"Grupo {value}", columns=lambda value: f"Grupo {value}"
         )
         pairs = [
-            {"Primer grupo": distance_display.index[i],
+            {"first_id": int(profile_distances.index[i]),
+             "second_id": int(profile_distances.columns[j]),
+             "Primer grupo": distance_display.index[i],
              "Segundo grupo": distance_display.columns[j],
              "Distancia": float(distance_display.iloc[i, j])}
             for i in range(len(distance_display)) for j in range(i + 1, len(distance_display))
@@ -1081,8 +1382,12 @@ with tab_distances:
                 st.caption("Solo hay dos grupos: existe una única pareja para comparar.")
         else:
             st.caption("Se necesitan al menos dos grupos para comparar perfiles diferentes.")
+        lower_triangle = np.tril(
+            np.ones(distance_display.shape, dtype=bool), k=0
+        )
+        distance_plot = distance_display.where(lower_triangle)
         fig_distances = px.imshow(
-            distance_display,
+            distance_plot,
             color_continuous_scale="Blues",
             zmin=0,
             aspect="auto",
@@ -1099,8 +1404,26 @@ with tab_distances:
                                   tickvals=distance_display.columns.tolist())
         fig_distances.update_yaxes(type="category", fixedrange=True, tickmode="array",
                                   tickvals=distance_display.index.tolist())
+        distance_custom = []
+        for row_label in profile_distances.index:
+            custom_row = []
+            for column_label in profile_distances.columns:
+                first, second = sorted((int(row_label), int(column_label)))
+                if first == second:
+                    custom_row.append("Mismo grupo: la distancia consigo mismo es cero")
+                elif int(row_label) < int(column_label):
+                    custom_row.append("")
+                else:
+                    custom_row.append(
+                        pair_summaries.get((first, second), "Sin detalle disponible")
+                    )
+            distance_custom.append(custom_row)
         fig_distances.update_traces(
-            hovertemplate="%{y} y %{x}<br>Distancia: %{z:.3f}<extra></extra>"
+            customdata=distance_custom,
+            hovertemplate=(
+                "<b>%{y} y %{x}</b><br>Distancia: %{z:.3f}<br>"
+                "Contrastes destacados:%{customdata}<extra></extra>"
+            ),
         )
         apply_plotly_theme(
             fig_distances,
@@ -1110,11 +1433,47 @@ with tab_distances:
         )
         st.plotly_chart(fig_distances, width="stretch", config=HEATMAP_PLOT_CONFIG_ES,
                         key=f"profile_distances_{selected_run_id}")
+        if not pair_table.empty:
+            pair_options = [
+                (int(row.first_id), int(row.second_id))
+                for row in pair_table.itertuples()
+            ]
+            selected_pair = st.selectbox(
+                "Pareja para detallar",
+                options=pair_options,
+                format_func=lambda pair: f"Grupo {pair[0]} y Grupo {pair[1]}",
+                key="distance_pair_detail",
+            )
+            pair_detail = pair_difference_details(
+                semantic_differences,
+                selected_pair[0],
+                selected_pair[1],
+                top_n=3,
+            )
+            if not pair_detail.empty:
+                st.markdown("##### Contrastes destacados de la pareja")
+                st.dataframe(
+                    pair_detail.drop(columns="contraste_relativo"),
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "variable": st.column_config.TextColumn(
+                            "Variable", pinned=True, width="medium"
+                        ),
+                        "intensidad": st.column_config.ProgressColumn(
+                            "Intensidad relativa",
+                            help="Contraste normalizado entre los dos grupos seleccionados.",
+                            min_value=0,
+                            max_value=100,
+                            format="%.0f %",
+                        ),
+                    },
+                )
         st.write(
             "**¿Qué puedo concluir?** Una distancia menor indica mayor semejanza entre "
             "los promedios en esta ejecución. No significa que todas las personas de ambos "
             "grupos sean iguales, ni que los grupos deban unirse. Consulta Diferencias "
-            "y Análisis de perfiles para entender qué características los separan."
+            "y las vistas de Diferencias para entender qué características los separan."
         )
         with st.expander("Ver todas las parejas y cómo se calcula la distancia"):
             st.write(
@@ -1131,7 +1490,11 @@ with tab_distances:
                 "Las observaciones de ruido no se incluyen."
             )
             if not pair_table.empty:
-                st.dataframe(pair_table, hide_index=True, width="stretch")
+                st.dataframe(
+                    pair_table.drop(columns=["first_id", "second_id"]),
+                    hide_index=True,
+                    width="stretch",
+                )
 
 with tab_dimensions:
     st.caption(
@@ -1141,74 +1504,148 @@ with tab_dimensions:
     if dimension_scores.empty:
         st.warning("No hay dimensiones agregadas disponibles para este run.")
     else:
+        dimension_scores = dimension_scores.copy()
+        dimension_scores["dimension_detail"] = dimension_scores["features"].map(
+            _dimension_detail
+        )
+        dimension_scores["reading"] = dimension_scores.apply(
+            _dimension_reading, axis=1
+        )
+        dimension_scores["difference_percentage"] = dimension_scores.apply(
+            _dimension_difference_percentage, axis=1
+        )
+        tab_radar, tab_dimension_map = st.tabs(["Radar", "Mapa de diferencias"])
         cluster_options = sorted(
             dimension_scores["cluster"].unique().tolist(),
             key=lambda value: int(value),
         )
-        selected_clusters = st.multiselect(
-            "Clusters a mostrar en radar",
-            options=cluster_options,
-            default=cluster_options[: min(4, len(cluster_options))],
-        )
-        if selected_clusters:
-            radar_data = dimension_scores[
-                dimension_scores["cluster"].isin(selected_clusters)
-            ]
-            fig_radar = px.line_polar(
-                radar_data,
-                r="cluster_value",
-                theta="dimension",
-                color="cluster",
-                color_discrete_map=cluster_color_map(radar_data["cluster"]),
-                line_close=True,
-                range_r=[0, 1],
-                labels={
-                    "cluster_value": "Valor agregado",
-                    "dimension": "Dimension",
-                    "cluster": "Cluster",
-                },
-                title="Radar de dimensiones agregadas",
+        with tab_radar:
+            st.caption(
+                "Pasa el cursor por un punto para ver qué variables forman la dimensión "
+                "y cómo se compara el grupo con la referencia global."
             )
-            fig_radar.update_traces(mode="lines+markers", line={"width": 2.5})
-            apply_plotly_theme(
-                fig_radar,
-                ACTIVE_THEME,
-                margin={"l": 50, "r": 50, "t": 60, "b": 35},
-                polar=True,
+            selected_clusters = st.multiselect(
+                "Clusters a mostrar en radar",
+                options=cluster_options,
+                default=cluster_options[: min(4, len(cluster_options))],
             )
-            st.plotly_chart(fig_radar, width="stretch", config=PLOT_CONFIG_ES)
-        else:
-            st.warning("Selecciona al menos un cluster para el radar.", icon=":material/warning:")
+            if selected_clusters:
+                radar_data = dimension_scores[
+                    dimension_scores["cluster"].isin(selected_clusters)
+                ]
+                fig_radar = px.line_polar(
+                    radar_data,
+                    r="cluster_value",
+                    theta="dimension",
+                    color="cluster",
+                    color_discrete_map=cluster_color_map(radar_data["cluster"]),
+                    custom_data=["global_value", "reading", "dimension_detail"],
+                    line_close=True,
+                    range_r=[0, 1],
+                    labels={
+                        "cluster_value": "Valor agregado",
+                        "dimension": "Dimension",
+                        "cluster": "Cluster",
+                    },
+                    title="Radar de dimensiones agregadas",
+                )
+                fig_radar.update_traces(
+                    mode="lines+markers",
+                    line={"width": 2.5},
+                    hovertemplate=(
+                        "<b>%{fullData.name} · %{theta}</b><br>"
+                        "Valor agregado: %{r:.3f}<br>%{customdata[1]}<br>"
+                        "Incluye: %{customdata[2]}<extra></extra>"
+                    ),
+                )
+                apply_plotly_theme(
+                    fig_radar,
+                    ACTIVE_THEME,
+                    margin={"l": 50, "r": 50, "t": 60, "b": 35},
+                    polar=True,
+                )
+                st.plotly_chart(fig_radar, width="stretch", config=PLOT_CONFIG_ES)
+            else:
+                st.warning("Selecciona al menos un cluster para el radar.", icon=":material/warning:")
 
-        dimension_heatmap = dimension_scores.pivot_table(
-            index="dimension",
-            columns="cluster",
-            values="deviation",
-            aggfunc="mean",
-        )
-        fig_dimensions = px.imshow(
-            dimension_heatmap,
-            color_continuous_scale="RdBu_r",
-            color_continuous_midpoint=0,
-            aspect="auto",
-            labels={
-                "x": "Cluster",
-                "y": "Dimension",
-                "color": "Diferencia",
-            },
-            title="Diferencia de dimensiones frente al promedio global",
-        )
-        apply_plotly_theme(
-            fig_dimensions,
-            ACTIVE_THEME,
-            margin={"l": 30, "r": 75, "t": 60, "b": 55},
-        )
-        st.plotly_chart(fig_dimensions, width="stretch", config=PLOT_CONFIG_ES)
-        st.dataframe(
-            _dimension_scores_display(dimension_scores),
-            width="stretch",
-            hide_index=True,
-        )
+        with tab_dimension_map:
+            st.caption(
+                "Rojo indica un valor agregado por encima de la referencia global y azul "
+                "uno por debajo. No implica una valoración positiva o negativa."
+            )
+            dimension_order = dimension_scores["dimension"].drop_duplicates().tolist()
+            cluster_order = cluster_options
+            dimension_heatmap = dimension_scores.pivot_table(
+                index="dimension",
+                columns="cluster",
+                values="deviation",
+                aggfunc="mean",
+            ).reindex(index=dimension_order, columns=cluster_order)
+            dimension_lookup = dimension_scores.set_index(["dimension", "cluster"])
+            dimension_custom = [
+                [
+                    [
+                        dimension_lookup.loc[(dimension, cluster), "reading"],
+                        dimension_lookup.loc[(dimension, cluster), "dimension_detail"],
+                    ]
+                    for cluster in cluster_order
+                ]
+                for dimension in dimension_order
+            ]
+            finite_values = dimension_heatmap.to_numpy()
+            finite_values = finite_values[pd.notna(finite_values)]
+            dimension_bound = (
+                max(float(abs(finite_values).max()), 0.01)
+                if finite_values.size
+                else 1.0
+            )
+            fig_dimensions = go.Figure(
+                go.Heatmap(
+                    z=dimension_heatmap.to_numpy(),
+                    x=[f"Grupo {cluster}" for cluster in cluster_order],
+                    y=dimension_order,
+                    customdata=dimension_custom,
+                    colorscale="RdBu_r",
+                    zmin=-dimension_bound,
+                    zmax=dimension_bound,
+                    zmid=0,
+                    colorbar={"title": "Diferencia"},
+                    hovertemplate=(
+                        "<b>%{y} · %{x}</b><br>%{customdata[0]}<br>"
+                        "Incluye: %{customdata[1]}<extra></extra>"
+                    ),
+                )
+            )
+            fig_dimensions.update_layout(
+                title="Diferencia de dimensiones frente al promedio global",
+                height=max(440, len(dimension_order) * 55 + 150),
+                dragmode=False,
+            )
+            apply_plotly_theme(
+                fig_dimensions,
+                ACTIVE_THEME,
+                margin={"l": 30, "r": 75, "t": 60, "b": 55},
+            )
+            st.plotly_chart(
+                fig_dimensions, width="stretch", config=HEATMAP_PLOT_CONFIG_ES
+            )
+            st.markdown("##### Resultados por dimensión")
+            st.caption(
+                "Cada panel mantiene las variables fuera de la tabla y muestra una sola "
+                "referencia global común a todos sus grupos."
+            )
+            for dimension_index, dimension in enumerate(dimension_order):
+                dimension_rows = dimension_scores[
+                    dimension_scores["dimension"] == dimension
+                ].sort_values("cluster_id")
+                feature_detail = dimension_rows["dimension_detail"].iloc[0]
+                with st.expander(
+                    dimension,
+                    icon=":material/category:",
+                    expanded=dimension_index == 0,
+                ):
+                    st.caption(f"Incluye: {feature_detail}")
+                    _render_dimension_section_table(dimension_rows)
 
 with tab_compare:
     compare_ids = st.multiselect(
@@ -1235,64 +1672,134 @@ with tab_compare:
         comparison_df = runs_df[runs_df["run_id"].isin(compare_ids)].copy()
         comparison_df["run_label"] = comparison_df.apply(_comparison_label, axis=1)
 
-        metric_tabs = st.tabs([spec["label"] for spec in METRIC_SPECS.values()])
-        for tab, (metric_key, spec) in zip(metric_tabs, METRIC_SPECS.items()):
-            with tab:
-                metric_df = comparison_df[
-                    ["run_id", "algorithm", "run_label", metric_key]
-                ].copy()
-                metric_df = metric_df.dropna(subset=[metric_key])
+        metric_labels = [spec["label"] for spec in METRIC_SPECS.values()]
+        selected_metric_label = st.segmented_control(
+            "Métrica para comparar",
+            options=metric_labels,
+            default=metric_labels[0],
+            key="comparison_metric",
+        )
+        metric_key, spec = next(
+            (key, value)
+            for key, value in METRIC_SPECS.items()
+            if value["label"] == selected_metric_label
+        )
+        metric_df = comparison_df[
+            ["run_id", "algorithm", "run_label", metric_key]
+        ].copy()
+        metric_df = metric_df.dropna(subset=[metric_key])
 
-                if metric_df.empty:
-                    st.warning(
-                        f"No hay valores validos para {spec['label']} en los runs seleccionados.",
-                        icon=":material/warning:",
-                    )
-                    continue
-
-                ascending = spec["direction"] == "menor"
-                metric_df = metric_df.sort_values(metric_key, ascending=ascending)
-                if comparability["directly_comparable"]:
-                    best_row = metric_df.iloc[0]
-                    col_best, col_note = st.columns([1, 2])
-                    col_best.metric(
-                        f"Mejor {spec['label']}",
-                        _format_metric(best_row[metric_key], spec["precision"]),
-                        best_row["algorithm"],
-                    )
-                    col_note.caption(spec["description"])
-                else:
-                    st.caption(spec["description"] + " Se muestra sin declarar un ganador.")
-
-                fig_metric = px.bar(
-                    metric_df,
-                    x="run_label",
-                    y=metric_key,
-                    color="algorithm",
-                    color_discrete_map=ALGORITHM_COLOR_MAP,
-                    category_orders={"algorithm": list(ALGORITHM_COLOR_MAP)},
-                    hover_data=["run_id"],
-                    text=metric_key,
-                    labels={
-                        "run_label": "Ejecucion",
-                        metric_key: spec["label"],
-                        "algorithm": "Algoritmo",
-                    },
-                    title=f"Comparacion individual: {spec['label']}",
+        if metric_df.empty:
+            st.warning(
+                f"No hay valores validos para {spec['label']} en los runs seleccionados.",
+                icon=":material/warning:",
+            )
+        else:
+            ascending = spec["direction"] == "menor"
+            metric_df = metric_df.sort_values(metric_key, ascending=ascending)
+            if comparability["directly_comparable"]:
+                best_row = metric_df.iloc[0]
+                col_best, col_note = st.columns([1, 2])
+                col_best.metric(
+                    f"Mejor {spec['label']}",
+                    _format_metric(best_row[metric_key], spec["precision"]),
+                    best_row["algorithm"],
                 )
-                fig_metric.update_traces(
-                    texttemplate=f"%{{text:.{spec['precision']}f}}",
-                    textposition="outside",
-                )
-                apply_plotly_theme(
-                    fig_metric,
-                    ACTIVE_THEME,
-                    margin={"l": 30, "r": 20, "t": 55, "b": 90},
-                )
-                fig_metric.update_layout(xaxis_tickangle=-25)
-                st.plotly_chart(fig_metric, width="stretch", config=PLOT_CONFIG_ES)
+                col_note.caption(spec["description"])
+                comparison_reading = "Ejecuciones comparables; se puede identificar el mejor valor."
+            else:
+                st.caption(spec["description"] + " Se muestra sin declarar un ganador.")
+                comparison_reading = "Lectura descriptiva; estas ejecuciones no son comparables directamente."
 
-        st.dataframe(comparison_df, width="stretch", hide_index=True)
+            metric_df["metric_description"] = spec["description"]
+            metric_df["comparison_reading"] = comparison_reading
+            fig_metric = px.bar(
+                metric_df,
+                x="run_label",
+                y=metric_key,
+                color="algorithm",
+                color_discrete_map=ALGORITHM_COLOR_MAP,
+                category_orders={"algorithm": list(ALGORITHM_COLOR_MAP)},
+                custom_data=["run_id", "metric_description", "comparison_reading"],
+                text=metric_key,
+                labels={
+                    "run_label": "Ejecucion",
+                    metric_key: spec["label"],
+                    "algorithm": "Algoritmo",
+                },
+                title=f"Comparacion individual: {spec['label']}",
+            )
+            fig_metric.update_traces(
+                texttemplate=f"%{{text:.{spec['precision']}f}}",
+                textposition="outside",
+                hovertemplate=(
+                    f"<b>%{{x}}</b><br>{spec['label']}: %{{y:.{spec['precision']}f}}<br>"
+                    "Run: %{customdata[0]}<br>%{customdata[1]}<br>"
+                    "%{customdata[2]}<extra></extra>"
+                ),
+            )
+            apply_plotly_theme(
+                fig_metric,
+                ACTIVE_THEME,
+                margin={"l": 30, "r": 20, "t": 55, "b": 90},
+            )
+            fig_metric.update_layout(xaxis_tickangle=-25)
+            st.plotly_chart(fig_metric, width="stretch", config=PLOT_CONFIG_ES)
+
+        comparison_columns = [
+            column for column in (
+                "algorithm",
+                "timestamp",
+                metric_key,
+                "coverage_percentage",
+                "noise_percentage",
+            )
+            if column in comparison_df.columns
+        ]
+        comparison_display = comparison_df[comparison_columns].copy()
+        comparison_display["comparability"] = (
+            "Comparables"
+            if comparability["directly_comparable"]
+            else "Solo lectura descriptiva"
+        )
+        comparison_display = comparison_display.rename(columns={
+            "algorithm": "Algoritmo",
+            "timestamp": "Fecha",
+            metric_key: spec["label"],
+            "coverage_percentage": "Cobertura (%)",
+            "noise_percentage": "Ruido (%)",
+            "comparability": "Comparabilidad",
+        })
+        st.dataframe(
+            comparison_display,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Algoritmo": st.column_config.TextColumn(pinned=True),
+                "Fecha": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm"),
+                spec["label"]: st.column_config.NumberColumn(
+                    format=f"%.{spec['precision']}f"
+                ),
+                "Cobertura (%)": st.column_config.NumberColumn(format="%.2f"),
+                "Ruido (%)": st.column_config.NumberColumn(format="%.2f"),
+            },
+        )
+        with st.expander("Identificadores y detalle técnico"):
+            technical_columns = [
+                column for column in (
+                    "run_id",
+                    "algorithm",
+                    "timestamp",
+                    "n_clusters",
+                    "n_noise",
+                )
+                if column in comparison_df.columns
+            ]
+            st.dataframe(
+                comparison_df[technical_columns],
+                width="stretch",
+                hide_index=True,
+            )
 
     if len(compare_ids) >= 2:
         if st.button(

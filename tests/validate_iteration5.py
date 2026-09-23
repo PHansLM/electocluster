@@ -1092,12 +1092,29 @@ def run_streamlit_checks() -> None:
 
         if page == "src/pages/4_resultados.py":
             tab_labels = [tab.label for tab in app.tabs]
-            assert "Perfiles" not in tab_labels, (
-                f"Unexpected legacy tab found. Available tabs: {tab_labels}"
+            expected_tabs = {
+                "Resumen y perfiles",
+                "Resumen de grupos",
+                "Detalle semántico",
+                "Proyección PCA",
+                "Diferencias",
+                "Vista relativa",
+                "Magnitudes reales",
+                "Distancias",
+                "Dimensiones",
+                "Radar",
+                "Mapa de diferencias",
+                "Comparación",
+            }
+            assert expected_tabs <= set(tab_labels), (
+                f"Consolidated results navigation is incomplete: {tab_labels}"
             )
-            assert "Analisis de perfiles" in tab_labels, (
-                f"Semantic profiles tab missing. Available tabs: {tab_labels}"
-            )
+            assert not {
+                "Distribucion",
+                "Analisis de perfiles",
+                "Heatmap semántico",
+                "PCA 2D",
+            } & set(tab_labels), f"Legacy top-level tabs remain: {tab_labels}"
             download_labels = [
                 button.label for button in app.get("download_button")
             ]
@@ -1116,6 +1133,36 @@ def run_streamlit_checks() -> None:
             assert "Descargar evidencia integrada JSON" not in download_labels, (
                 "Deprecated integrated evidence download is still exposed."
             )
+
+            multiselect_labels = [item.label for item in app.multiselect]
+            assert "Grupos visibles" in multiselect_labels
+            assert "Características visibles" in multiselect_labels
+            assert "Pareja para detallar" in [item.label for item in app.selectbox]
+            button_group_labels = [
+                item.label for item in app.get("button_group")
+            ]
+            assert "Características a detallar" in button_group_labels
+
+            dataframe_columns = [set(frame.value.columns) for frame in app.dataframe]
+            rendered_html = [item.value for item in app.markdown]
+            feature_tables = [
+                value
+                for value in rendered_html
+                if '<table class="merged-table feature-explanation-table">' in value
+            ]
+            assert feature_tables
+            assert "Referencia común" in feature_tables[0]
+            assert "rowspan=" in feature_tables[0]
+            dimension_tables = [
+                value
+                for value in rendered_html
+                if '<table class="merged-table dimension-section-table">' in value
+            ]
+            assert dimension_tables
+            assert all("Referencia global" in value for value in dimension_tables)
+            assert all("rowspan=" in value for value in dimension_tables)
+            assert all("Variables incluidas" not in value for value in dimension_tables)
+            assert any("Separación relativa" in columns for columns in dataframe_columns)
 
             selectboxes = {selectbox.label: selectbox for selectbox in app.selectbox}
             assert "Cluster del perfil semantico" in selectboxes, (
