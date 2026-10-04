@@ -4,6 +4,24 @@ from html import escape
 
 import streamlit as st
 
+from src.ui_feedback import configuration_changes, handle_configuration_navigation
+
+
+_PAGES = {
+    "Inicio": ("app.py", ":material/home:"),
+    "Preprocesamiento": ("pages/0_preprocesamiento.py", ":material/table_view:"),
+    "Ponderación": ("pages/1_ponderacion.py", ":material/balance:"),
+    "Configuración": ("pages/2_configuracion.py", ":material/tune:"),
+    "Ejecución": ("pages/3_ejecucion.py", ":material/play_arrow:"),
+    "Resultados": ("pages/4_resultados.py", ":material/analytics:"),
+}
+
+
+def _request_page(section: str) -> None:
+    st.session_state["configuration_navigation"] = {
+        "kind": "page", "value": _PAGES[section][0], "section": section,
+    }
+
 
 _SHARED_STYLES = """
 <style>
@@ -94,6 +112,19 @@ _SHARED_STYLES = """
 
 def apply_app_shell(section: str) -> None:
     """Aplica la base visual y añade una identificación lateral breve."""
+    previous_section = st.session_state.get("ui_current_section")
+    target = st.session_state.get("configuration_navigation")
+    if section != "Configuración":
+        if target and target["kind"] == "page" and target["section"] != section:
+            st.session_state.pop("configuration_navigation", None)
+            st.switch_page(target["value"])
+        # También protege la navegación directa, por ejemplo con Atrás del navegador.
+        if previous_section == "Configuración" and configuration_changes():
+            _request_page(section)
+            handle_configuration_navigation(already_on_target=True)
+            st.stop()
+        st.session_state.pop("configuration_navigation", None)
+    st.session_state["ui_current_section"] = section
     st.markdown(_SHARED_STYLES, unsafe_allow_html=True)
     with st.sidebar:
         st.markdown(
@@ -105,3 +136,9 @@ def apply_app_shell(section: str) -> None:
             """,
             unsafe_allow_html=True,
         )
+        for name, (path, icon) in _PAGES.items():
+            st.button(
+                name, icon=icon, width="stretch", key=f"navigate_{path}",
+                type="primary" if name == section else "secondary",
+                disabled=name == section, on_click=_request_page, args=(name,),
+            )

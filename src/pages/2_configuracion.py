@@ -7,6 +7,7 @@ controlada para la iteracion 5.
 
 import sys
 from dataclasses import asdict
+from math import isfinite
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +23,12 @@ from src.evaluation.parameter_optimizer import (
     optimize_wkmedoids_params,
 )
 from src.ui import apply_app_shell
+from src.ui_feedback import (
+    handle_configuration_navigation,
+    mark_parameter_change,
+    queue_feedback,
+    show_feedback_dialog,
+)
 from src.weighting.weight_manager import WeightManager
 
 
@@ -65,6 +72,51 @@ def _save_active_params(algorithm: str, params: dict):
     st.session_state["params"] = clean_params
 
 
+def _current_draft_params_for(algorithm: str) -> dict:
+    drafts = st.session_state.get("params_drafts_by_algorithm", {})
+    active = _current_params_for(algorithm)
+    draft = drafts.get(algorithm, {})
+    return {**active, **{key: value for key, value in draft.items() if key in active}}
+
+
+def _save_draft_params(algorithm: str, params: dict, *, reset_widgets: bool = False):
+    """Conserva la edicion sin habilitarla para la ejecucion."""
+    drafts = st.session_state.get("params_drafts_by_algorithm", {})
+    defaults = default_params(algorithm)
+    drafts[algorithm] = {
+        **defaults,
+        **{key: value for key, value in params.items() if key in defaults},
+    }
+    st.session_state["params_drafts_by_algorithm"] = drafts
+    if reset_widgets:
+        versions = st.session_state.get("params_draft_versions", {})
+        versions[algorithm] = versions.get(algorithm, 0) + 1
+        st.session_state["params_draft_versions"] = versions
+
+
+def _apply_assistant_draft(algorithm: str, params: dict, title: str, message: str):
+    """Evita que una recomendación fuera de los controles rompa el siguiente rerun."""
+    ranges = {
+        "WKMedoids": {"n_clusters": (2, 20), "random_state": (0, 999)},
+        "W-Hierarchical Clustering": {"n_clusters": (2, 15)},
+        "W-DBSCAN": {"eps": (0.1, 5.0), "min_samples": (2, 100), "pca_components": (2, 28)},
+    }
+    try:
+        for key, (minimum, maximum) in ranges[algorithm].items():
+            if key in params and not minimum <= params[key] <= maximum:
+                raise ValueError(f"{key}={params[key]} está fuera del rango {minimum}–{maximum}.")
+        _save_draft_params(algorithm, params, reset_widgets=True)
+        queue_feedback("success", title, message)
+    except Exception as exc:
+        queue_feedback(
+            "error", "No se pudieron aplicar los parámetros",
+            "Revisa el detalle y ajusta el rango de búsqueda si es necesario. "
+            "Los valores en edición y la configuración activa se conservan.",
+            details=f"{type(exc).__name__}: {exc}",
+        )
+    st.rerun()
+
+
 def _display_search_result(result):
     result_dict = asdict(result)
     st.session_state["last_param_search"] = result_dict
@@ -79,8 +131,8 @@ def _parameter_comparison(recommended: dict, canonical: dict) -> pd.DataFrame:
         canonical_value = canonical[key]
         rows.append({
             "Parámetro": key,
-            "Recomendación": recommended_value,
-            "Canónica": canonical_value,
+            "Recomendación": str(recommended_value),
+            "Canónica": str(canonical_value),
             "Estado": "Coincide" if recommended_value == canonical_value else "Difiere",
         })
     return pd.DataFrame(rows)
@@ -101,18 +153,45 @@ def _format_results_table(rows: list[dict]) -> pd.DataFrame:
 
 st.markdown("### Algoritmo a configurar")
 
+confirmed_algorithm = st.session_state.pop("confirmed_configuration_algorithm", None)
+if confirmed_algorithm:
+    st.session_state["config_algorithm_selector"] = confirmed_algorithm
+st.session_state.setdefault(
+    "config_algorithm_selector", st.session_state.get("algoritmo", "WKMedoids")
+)
+
+
+def _request_algorithm_change():
+    current = st.session_state.get("algoritmo", "WKMedoids")
+    requested = st.session_state["config_algorithm_selector"]
+    if current != requested:
+        st.session_state["configuration_navigation"] = {
+            "kind": "algorithm", "value": requested,
+        }
+        st.session_state["config_algorithm_selector"] = current
+
+
 algorithm = st.radio(
     label="Selecciona la configuración que quieres editar:",
     options=ALGORITHMS,
-    index=st.session_state.get("algoritmo_idx", 0),
+    key="config_algorithm_selector",
+    on_change=_request_algorithm_change,
     horizontal=True,
 )
 st.session_state["algoritmo"] = algorithm
 st.session_state["algoritmo_idx"] = ALGORITHMS.index(algorithm)
+st.session_state["params"] = _current_params_for(algorithm)
 
 st.markdown("### Parámetros manuales")
+st.caption(
+    "Los cambios quedan pendientes hasta que pulses Guardar configuración activa. "
+    "Cada algoritmo conserva por separado sus valores en edición y los guardados."
+)
 
-params = _current_params_for(algorithm)
+params = _current_draft_params_for(algorithm)
+active_params = _current_params_for(algorithm)
+draft_version = st.session_state.get("params_draft_versions", {}).get(algorithm, 0)
+widget_prefix = f"params_draft_{algorithm}_{draft_version}"
 
 if algorithm == "WKMedoids":
     st.markdown(
@@ -126,14 +205,18 @@ if algorithm == "WKMedoids":
             min_value=2,
             max_value=20,
             value=int(params.get("n_clusters", 13)),
+            key=f"{widget_prefix}_n_clusters",
         )
+        mark_parameter_change("n_clusters", params["n_clusters"], active_params)
     with col2:
         params["random_state"] = st.number_input(
             "Semilla aleatoria (random_state)",
             min_value=0,
             max_value=999,
             value=int(params.get("random_state", 42)),
+            key=f"{widget_prefix}_random_state",
         )
+        mark_parameter_change("random_state", params["random_state"], active_params)
     st.info(
         "El k óptimo bajo ponderación puede diferir del obtenido con el algoritmo "
         "tradicional. Usa el cálculo automático como orientación y valida el run final.",
@@ -153,14 +236,18 @@ elif algorithm == "W-Hierarchical Clustering":
             min_value=2,
             max_value=15,
             value=int(params.get("n_clusters", 2)),
+            key=f"{widget_prefix}_n_clusters",
         )
+        mark_parameter_change("n_clusters", params["n_clusters"], active_params)
     with col2:
         linkages = ["complete", "average", "single"]
         params["linkage"] = st.selectbox(
             "Método de linkage",
             options=linkages,
             index=linkages.index(params.get("linkage", "complete")),
+            key=f"{widget_prefix}_linkage",
         )
+        mark_parameter_change("linkage", params["linkage"], active_params)
     with col3:
         st.markdown("**Métrica de distancia**")
         st.write("Euclidiana ponderada")
@@ -184,40 +271,42 @@ else:
             step=0.05,
             value=float(params.get("eps", 0.606)),
             format="%.3f",
+            key=f"{widget_prefix}_eps",
         )
+        mark_parameter_change("eps", params["eps"], active_params)
     with col2:
         params["min_samples"] = st.number_input(
             "Mínimo de puntos núcleo",
             min_value=2,
             max_value=100,
             value=int(params.get("min_samples", 34)),
+            key=f"{widget_prefix}_min_samples",
         )
+        mark_parameter_change("min_samples", params["min_samples"], active_params)
     with col3:
         params["pca_components"] = st.number_input(
             "Componentes PCA previos",
             min_value=2,
             max_value=28,
             value=int(params.get("pca_components", 17)),
+            key=f"{widget_prefix}_pca_components",
         )
+        mark_parameter_change("pca_components", params["pca_components"], active_params)
     st.warning(
         "W-DBSCAN es sensible a dimensionalidad y ruido. La búsqueda automática aplica "
         "pesos antes de PCA y calcula métricas excluyendo puntos de ruido.",
         icon=":material/warning:",
     )
 
-_save_active_params(algorithm, params)
+_save_draft_params(algorithm, params)
 
 st.divider()
 
 st.markdown("### Asistente de parámetros")
 st.caption(
-    "La configuración manual queda guardada de inmediato. Abre el asistente solo si "
-    "quieres calcular una recomendación exploratoria para este algoritmo."
+    "Abre el asistente si quieres calcular una recomendación exploratoria. "
+    "Aplicarla actualiza los valores en edición; después debes guardar la configuración activa."
 )
-
-flash_message = st.session_state.pop("parameter_assistant_flash", None)
-if flash_message:
-    st.success(flash_message, icon=":material/check_circle:")
 
 show_param_search = st.session_state.get("show_param_search", False)
 toggle_label = (
@@ -228,6 +317,8 @@ toggle_label = (
 toggle_icon = ":material/close:" if show_param_search else ":material/tune:"
 if st.button(toggle_label, type="secondary", icon=toggle_icon):
     st.session_state["show_param_search"] = not show_param_search
+    if not show_param_search:
+        st.session_state.pop("assistant_dataset_status", None)
     st.rerun()
 
 if st.session_state.get("show_param_search", False):
@@ -246,23 +337,22 @@ if st.session_state.get("show_param_search", False):
             st.json(canonical_params)
         with canonical_action:
             st.caption(
-                "Restaura estos valores si necesitas ejecutar o demostrar la batería "
-                "canónica reproducible."
+                "Restaura estos valores en la edición y guarda la configuración activa "
+                "si quieres utilizarlos como fuente Activa en Ejecución."
             )
             if st.button(
                 "Restaurar configuración canónica",
                 icon=":material/restore:",
                 key=f"restore_canonical_{algorithm}",
             ):
-                _save_active_params(algorithm, canonical_params)
-                st.session_state["parameter_assistant_flash"] = (
-                    f"Configuración canónica restaurada para {algorithm}."
+                _apply_assistant_draft(algorithm, canonical_params, "Valores canónicos restaurados",
+                    f"Valores canónicos restaurados en la edición de {algorithm}. "
+                    "Pulsa Guardar configuración activa para confirmarlos."
                 )
-                st.rerun()
 
         st.info(
             "Calcular una recomendación no cambiará la configuración activa. Podrás "
-            "compararla y aplicarla explícitamente después.",
+            "compararla, aplicarla a la edición y guardarla explícitamente después.",
             icon=":material/info:",
         )
 
@@ -274,6 +364,15 @@ if st.session_state.get("show_param_search", False):
             df_processed = None
             dataset_ready = False
             dataset_error = str(exc)
+
+        dataset_status = "ready" if dataset_ready else dataset_error
+        if not dataset_ready and st.session_state.get("assistant_dataset_status") != dataset_status:
+            queue_feedback(
+                "error", "Asistente no disponible",
+                "No se pudo cargar el dataset procesado. Revisa Preprocesamiento antes de calcular una recomendación.",
+                details=dataset_error,
+            )
+        st.session_state["assistant_dataset_status"] = dataset_status
 
         if dataset_ready:
             st.caption(
@@ -349,41 +448,70 @@ if st.session_state.get("show_param_search", False):
         )
 
         if run_search and dataset_ready:
-            with st.spinner("Calculando recomendación de parámetros..."):
-                wm = WeightManager()
-                if algorithm == "WKMedoids":
-                    search_result = optimize_wkmedoids_params(
-                        df_processed,
-                        weight_manager=wm,
-                        k_values=k_values,
-                        sample_size=int(sample_size),
-                        random_state=int(random_state),
-                    )
-                elif algorithm == "W-Hierarchical Clustering":
-                    search_result = optimize_whierarchical_params(
-                        df_processed,
-                        weight_manager=wm,
-                        k_values=k_values,
-                        linkages=linkages_to_search or ["complete"],
-                        sample_size=int(sample_size),
-                        random_state=int(random_state),
+            try:
+                with st.spinner("Calculando recomendación de parámetros..."):
+                    wm = WeightManager()
+                    if algorithm == "WKMedoids":
+                        search_result = optimize_wkmedoids_params(
+                            df_processed,
+                            weight_manager=wm,
+                            k_values=k_values,
+                            sample_size=int(sample_size),
+                            random_state=int(random_state),
+                        )
+                    elif algorithm == "W-Hierarchical Clustering":
+                        search_result = optimize_whierarchical_params(
+                            df_processed,
+                            weight_manager=wm,
+                            k_values=k_values,
+                            linkages=linkages_to_search or ["complete"],
+                            sample_size=int(sample_size),
+                            random_state=int(random_state),
+                        )
+                    else:
+                        search_result = optimize_wdbscan_params(
+                            df_processed,
+                            weight_manager=wm,
+                            sample_size=int(sample_size),
+                            random_state=int(random_state),
+                            variance_target=float(variance_target),
+                        )
+                _display_search_result(search_result)
+                has_valid_metrics = any(
+                    row.get("silhouette") is not None and isfinite(float(row["silhouette"]))
+                    for row in search_result.rows
+                )
+                st.session_state["last_param_search"]["valid_recommendation"] = has_valid_metrics
+                if has_valid_metrics:
+                    queue_feedback(
+                        "success", "Recomendación calculada",
+                        f"La exploración de {algorithm} terminó sobre {search_result.sample_size} registros. "
+                        "Revisa el resultado antes de aplicarlo a la edición y guardar la configuración activa.",
                     )
                 else:
-                    search_result = optimize_wdbscan_params(
-                        df_processed,
-                        weight_manager=wm,
-                        sample_size=int(sample_size),
-                        random_state=int(random_state),
-                        variance_target=float(variance_target),
+                    queue_feedback(
+                        "error", "Sin recomendación válida",
+                        "La búsqueda terminó sin métricas válidas para seleccionar parámetros. "
+                        "Ajusta la muestra o los rangos y vuelve a calcular.",
                     )
-
-            _display_search_result(search_result)
+            except Exception as exc:
+                st.session_state.pop("last_param_search", None)
+                st.session_state.pop("last_param_search_algorithm", None)
+                queue_feedback(
+                    "error", "No se pudo calcular la recomendación",
+                    "El asistente encontró un error. Revisa el detalle y vuelve a intentarlo. "
+                    "Los valores en edición y la configuración activa se conservan.",
+                    details=f"{type(exc).__name__}: {exc}",
+                )
             st.rerun()
 
         last_result = st.session_state.get("last_param_search")
         if last_result and st.session_state.get("last_param_search_algorithm") == algorithm:
-            st.markdown("##### Última recomendación")
+            valid_recommendation = last_result.get("valid_recommendation", True)
+            st.markdown("##### Última recomendación" if valid_recommendation else "##### Última búsqueda sin recomendación válida")
             col_best, col_criterion, col_sample = st.columns([1.2, 1.4, 1])
+            if not valid_recommendation:
+                col_best.caption("Valores de respaldo del cálculo; no constituyen una recomendación.")
             col_best.json(last_result["best_params"])
             with col_criterion:
                 st.markdown("**Criterio**")
@@ -394,7 +522,9 @@ if st.session_state.get("show_param_search", False):
                 last_result["best_params"],
                 canonical_params,
             )
-            if (comparison["Estado"] == "Coincide").all():
+            if not valid_recommendation:
+                st.error("No hubo métricas válidas para recomendar parámetros. Ajusta la muestra o los rangos y vuelve a calcular.")
+            elif (comparison["Estado"] == "Coincide").all():
                 st.success(
                     "La recomendación coincide con la configuración canónica.",
                     icon=":material/check_circle:",
@@ -406,18 +536,19 @@ if st.session_state.get("show_param_search", False):
                     "configuración alternativa.",
                     icon=":material/warning:",
                 )
-            st.dataframe(comparison, width="stretch", hide_index=True)
+            if valid_recommendation:
+                st.dataframe(comparison, width="stretch", hide_index=True)
 
             if st.button(
                 "Aplicar esta recomendación",
                 icon=":material/check:",
                 key=f"apply_recommendation_{algorithm}",
+                disabled=not valid_recommendation,
             ):
-                _save_active_params(algorithm, last_result["best_params"])
-                st.session_state["parameter_assistant_flash"] = (
-                    f"Recomendación aplicada a {algorithm}."
+                _apply_assistant_draft(algorithm, last_result["best_params"], "Recomendación aplicada a la edición",
+                    f"Recomendación aplicada a la edición de {algorithm}. "
+                    "Pulsa Guardar configuración activa para confirmarla."
                 )
-                st.rerun()
 
             for note in last_result.get("notes", []):
                 st.caption(note)
@@ -431,17 +562,37 @@ if st.session_state.get("show_param_search", False):
             else:
                 st.dataframe(result_table, width="stretch", hide_index=True)
 
-st.markdown("### Resumen de configuración activa")
-col_alg, col_params = st.columns(2)
-with col_alg:
-    st.markdown("**Configuración en edición**")
-    st.write(algorithm)
-with col_params:
-    st.json(st.session_state["params"])
+st.markdown("### Resumen de configuración")
+active_params = _current_params_for(algorithm)
+col_draft, col_active = st.columns(2)
+with col_draft:
+    st.markdown("**Valores en edición**")
+    st.json(params)
+with col_active:
+    st.markdown("**Configuración activa guardada**")
+    st.json(active_params)
+
+if params != active_params:
+    st.warning(
+        "Hay cambios sin guardar. Ejecución utilizará la configuración activa guardada "
+        "hasta que confirmes estos valores.",
+        icon=":material/pending:",
+    )
 
 if st.button("Guardar configuración activa", type="primary", icon=":material/check:"):
-    st.success(
-        f"Configuración guardada: **{algorithm}** con parámetros `{st.session_state['params']}`. "
-        "Navega a **Ejecución** para correr una o varias configuraciones.",
-        icon=":material/check_circle:",
-    )
+    try:
+        _save_active_params(algorithm, params)
+        queue_feedback("success", "Configuración activa guardada",
+            f"Configuración activa guardada: {algorithm} con parámetros {params}. "
+            "Ya está disponible en Ejecución."
+        )
+    except Exception as exc:
+        queue_feedback(
+            "error", "No se pudo guardar la configuración",
+            "No se pudo confirmar la configuración activa. Revisa el detalle y vuelve a intentarlo.",
+            details=f"{type(exc).__name__}: {exc}",
+        )
+    st.rerun()
+
+if not handle_configuration_navigation():
+    show_feedback_dialog()

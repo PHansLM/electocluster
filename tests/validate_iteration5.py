@@ -1067,6 +1067,7 @@ def run_streamlit_checks() -> None:
             )
             calculate.click().run(timeout=30)
             assert not app.exception
+            next(button for button in app.button if button.label == "Entendido").click().run(timeout=20)
             assert app.session_state["params_by_algorithm"]["WKMedoids"] == (
                 active_before_search
             ), "La exploracion rapida modifico la configuracion activa."
@@ -1074,6 +1075,25 @@ def run_streamlit_checks() -> None:
                 button.label == "Aplicar esta recomendación"
                 for button in app.button
             )
+
+            recommended = dict(app.session_state["last_param_search"]["best_params"])
+            next(
+                button for button in app.button
+                if button.label == "Aplicar esta recomendación"
+            ).click().run(timeout=20)
+            assert not app.exception
+            assert app.session_state["params_by_algorithm"]["WKMedoids"] == (
+                active_before_search
+            ), "Aplicar la recomendacion no debe guardar la configuracion activa."
+            assert app.session_state["params_drafts_by_algorithm"]["WKMedoids"] == recommended
+            next(button for button in app.button if button.label == "Entendido").click().run(timeout=20)
+            next(
+                button for button in app.button
+                if button.label == "Guardar configuración activa"
+            ).click().run(timeout=20)
+            assert not app.exception
+            assert app.session_state["params_by_algorithm"]["WKMedoids"] == recommended
+            next(button for button in app.button if button.label == "Entendido").click().run(timeout=20)
 
             app.session_state["params_by_algorithm"]["WKMedoids"] = {
                 "n_clusters": 2,
@@ -1085,6 +1105,21 @@ def run_streamlit_checks() -> None:
                 if button.label == "Restaurar configuración canónica"
             )
             restore.click().run(timeout=20)
+            assert not app.exception
+            assert app.session_state["params_by_algorithm"]["WKMedoids"] == {
+                "n_clusters": 2,
+                "random_state": 7,
+            }, "Restaurar la referencia debe dejar los cambios pendientes de guardado."
+            assert app.session_state["params_drafts_by_algorithm"]["WKMedoids"] == {
+                "n_clusters": 13,
+                "random_state": 42,
+            }
+            next(button for button in app.button if button.label == "Entendido").click().run(timeout=20)
+            next(
+                button for button in app.button
+                if button.label == "Guardar configuración activa"
+            ).click().run(timeout=20)
+            assert not app.exception
             assert app.session_state["params_by_algorithm"]["WKMedoids"] == {
                 "n_clusters": 13,
                 "random_state": 42,

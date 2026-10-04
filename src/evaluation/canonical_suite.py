@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from time import perf_counter
-from typing import Any
+from typing import Any, Callable
 
 from .comparability import assess_run_comparability, run_evaluation_summary
 from .execution import ALGORITHMS, ExecutionResult, default_params, run_clustering_experiment
@@ -136,8 +136,12 @@ def run_canonical_suite(
     dataset_path: str | None = None,
     results_manager: ResultsManager | None = None,
     persist: bool = True,
+    on_result: Callable[[ExecutionResult], None] | None = None,
 ) -> CanonicalSuiteResult:
-    """Ejecuta la terna canonica y produce la fuente consolidada del capitulo 8."""
+    """Ejecuta la terna canónica y produce la evidencia consolidada del capítulo 8.
+
+    on_result informa cada ejecución completada, incluso si después falla la suite.
+    """
     manager = results_manager or ResultsManager()
     started_at = datetime.now().isoformat()
     suite_id = manager.generate_suite_id() if persist else None
@@ -157,6 +161,8 @@ def run_canonical_suite(
         result = run_clustering_experiment(**kwargs)
         elapsed_seconds = perf_counter() - started
         results.append(result)
+        if on_result is not None:
+            on_result(result)
         suite_runs.append(
             _suite_run_record(
                 result,

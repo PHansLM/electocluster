@@ -23,6 +23,7 @@ from src.evaluation.execution import (
 )
 from src.evaluation.canonical_suite import run_canonical_suite
 from src.ui import apply_app_shell
+from src.ui_feedback import queue_feedback, show_feedback_dialog
 from src.visualization import cluster_distribution
 from src.weighting.weight_manager import WeightManager
 
@@ -71,7 +72,17 @@ try:
     shape, preview, columns = get_dataset_preview()
 except Exception as exc:
     st.error(str(exc), icon=":material/error:")
+    dataset_error = f"{type(exc).__name__}: {exc}"
+    if st.session_state.get("execution_dataset_error") != dataset_error:
+        queue_feedback(
+            "error", "Ejecución no disponible",
+            "No se pudo cargar el dataset procesado. Revisa Preprocesamiento antes de ejecutar.",
+            details=dataset_error,
+        )
+    st.session_state["execution_dataset_error"] = dataset_error
+    show_feedback_dialog()
     st.stop()
+st.session_state.pop("execution_dataset_error", None)
 
 algorithm = st.session_state.get("algoritmo", "WKMedoids")
 
@@ -461,72 +472,128 @@ run_clicked = st.button(
 if run_clicked:
     rows = []
     run_ids = []
-    last_result = None
+    completed_results = []
+    failed_algorithm = None
+    progress = None
+    summary_message = ""
+    summary_kind = "success"
+    error_detail = ""
     canonical_configs = _canonical_configs()
     is_complete_canonical_suite = (
         set(selected_algorithms) == set(algorithm_options)
         and all(sources[algorithm_name] == SOURCE_CANONICAL for algorithm_name in algorithm_options)
     )
 
-    if is_complete_canonical_suite:
-        with st.spinner("Ejecutando y consolidando la bateria canonica..."):
-            suite = run_canonical_suite(persist=True)
-        run_ids = [result.run_id for result in suite.results if result.run_id]
-        st.session_state["last_canonical_suite_id"] = suite.suite_id
-        for suite_run in suite.artifact["runs"]:
-            rows.append({
-                "run_id": suite_run["run_id"],
-                "algorithm": suite_run["algorithm"],
-                "fuente": SOURCE_CANONICAL,
-                "silhouette": suite_run["metrics"].get("silhouette"),
-                "davies_bouldin": suite_run["metrics"].get("davies_bouldin"),
-                "calinski_harabasz": suite_run["metrics"].get("calinski_harabasz"),
-                "n_noise": suite_run["n_noise"],
-                "tiempo (s)": round(suite_run["elapsed_seconds"], 3),
-                "regresion": "OK" if suite_run["regression"]["passed"] else "Revisar",
-            })
-        if suite.artifact["regression"]["all_passed"]:
-            st.success("Bateria canonica consolidada y validada contra los controles historicos.")
-        else:
-            st.warning(
-                "La bateria se guardo, pero alguna metrica difiere del control historico. "
-                "Revisa la evidencia integrada antes de usarla en el capitulo final.",
-                icon=":material/warning:",
-            )
-    else:
-        progress = st.progress(0)
-        for i, selected_algorithm in enumerate(selected_algorithms, start=1):
-            selected_source = sources[selected_algorithm]
-            selected_params = (
-                active_configs[selected_algorithm]
-                if selected_source == SOURCE_ACTIVE
-                else canonical_configs[selected_algorithm]
-            )
-            with st.spinner(f"Ejecutando {selected_algorithm}..."):
-                result = run_clustering_experiment(
-                    algorithm=selected_algorithm,
-                    params=selected_params,
-                    weight_manager=WeightManager(),
-                    persist=True,
+    try:
+        if is_complete_canonical_suite:
+            with st.spinner("Ejecutando y consolidando la batería canónica..."):
+                suite = run_canonical_suite(persist=True, on_result=completed_results.append)
+            completed_results = list(suite.results)
+            st.session_state["last_canonical_suite_id"] = suite.suite_id
+            for suite_run in suite.artifact["runs"]:
+                rows.append({
+                    "run_id": suite_run["run_id"],
+                    "algorithm": suite_run["algorithm"],
+                    "fuente": SOURCE_CANONICAL,
+                    "silhouette": suite_run["metrics"].get("silhouette"),
+                    "davies_bouldin": suite_run["metrics"].get("davies_bouldin"),
+                    "calinski_harabasz": suite_run["metrics"].get("calinski_harabasz"),
+                    "n_noise": suite_run["n_noise"],
+                    "tiempo (s)": round(suite_run["elapsed_seconds"], 3),
+                    "regresion": "OK" if suite_run["regression"]["passed"] else "Revisar",
+                })
+            if suite.artifact["regression"]["all_passed"]:
+                summary_message = "Batería canónica completada, guardada y validada contra los controles históricos."
+            else:
+                summary_kind = "warning"
+                summary_message = (
+                    "La batería canónica terminó y se guardó, pero alguna métrica difiere del control histórico. "
+                    "Revisa la evidencia integrada antes de utilizarla en el capítulo final."
                 )
-            last_result = result
-            run_ids.append(result.run_id)
+        else:
+            progress = st.progress(0)
+            for i, selected_algorithm in enumerate(selected_algorithms, start=1):
+                failed_algorithm = selected_algorithm
+                selected_source = sources[selected_algorithm]
+                selected_params = (
+                    active_configs[selected_algorithm]
+                    if selected_source == SOURCE_ACTIVE
+                    else canonical_configs[selected_algorithm]
+                )
+                with st.spinner(f"Ejecutando {selected_algorithm}..."):
+                    result = run_clustering_experiment(
+                        algorithm=selected_algorithm,
+                        params=selected_params,
+                        weight_manager=WeightManager(),
+                        persist=True,
+                    )
+                completed_results.append(result)
+                progress.progress(i / len(selected_algorithms))
+            summary_message = (
+                f"Ejecución completada: {len(completed_results)} de {len(selected_algorithms)} algoritmos. "
+                "Los resultados se guardaron y están disponibles en Resultados."
+            )
+    except Exception as exc:
+        summary_kind = "error"
+        error_detail = f"{type(exc).__name__}: {exc}"
+        failed_at = (
+            f"Falló {failed_algorithm}. " if not is_complete_canonical_suite
+            else "No se pudo completar la batería canónica o su consolidación. "
+        )
+        saved_count = sum(bool(result.run_id) for result in completed_results)
+        summary_message = (
+            failed_at + f"Algoritmos completados: {len(completed_results)} de {len(selected_algorithms)}. "
+            + (
+                f"Se conservaron {saved_count} resultados guardados, disponibles en Resultados."
+                if saved_count else "Revisa el detalle del error antes de volver a ejecutar."
+            )
+        )
+    finally:
+        if progress is not None:
+            progress.empty()
+
+    run_ids = [result.run_id for result in completed_results if result.run_id]
+    if not rows:
+        for result in completed_results:
             rows.append({
                 "run_id": result.run_id,
-                "algorithm": selected_algorithm,
-                "fuente": selected_source,
+                "algorithm": result.algorithm,
+                "fuente": sources[result.algorithm],
                 "silhouette": result.metrics.get("silhouette"),
                 "davies_bouldin": result.metrics.get("davies_bouldin"),
                 "calinski_harabasz": result.metrics.get("calinski_harabasz"),
                 "n_noise": int((result.labels == -1).sum()),
             })
-            progress.progress(i / len(selected_algorithms))
-
     st.session_state["last_suite_run_ids"] = run_ids
-    st.session_state["last_run_id"] = run_ids[-1] if run_ids else None
-    if not is_complete_canonical_suite:
-        st.success("Ejecucion completada.")
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    if run_ids:
+        st.session_state["last_run_id"] = run_ids[-1]
+    last_result = completed_results[-1] if len(completed_results) == 1 else None
+    st.session_state["last_execution_summary"] = {
+        "kind": summary_kind, "message": summary_message, "rows": rows,
+        "details": error_detail,
+        "result": (
+            {"metrics": last_result.metrics, "labels": last_result.labels, "metadata": last_result.metadata}
+            if last_result is not None else None
+        ),
+    }
+    title = {
+        "success": "Ejecución completada",
+        "warning": "Ejecución completada con observaciones",
+        "error": "Error en la ejecución",
+    }[summary_kind]
+    queue_feedback(summary_kind, title, summary_message, details=error_detail)
 
-    if len(run_ids) == 1 and last_result is not None:
-        _render_result_summary(last_result.metrics, last_result.labels, last_result.metadata)
+last_summary = st.session_state.get("last_execution_summary")
+if last_summary:
+    st.markdown("### Última ejecución")
+    getattr(st, last_summary["kind"])(last_summary["message"])
+    if last_summary.get("details"):
+        with st.expander("Detalle del último error"):
+            st.code(last_summary["details"], language=None)
+    if last_summary["rows"]:
+        st.dataframe(pd.DataFrame(last_summary["rows"]), width="stretch", hide_index=True)
+    last_result = last_summary.get("result")
+    if last_result is not None:
+        _render_result_summary(last_result["metrics"], last_result["labels"], last_result["metadata"])
+
+show_feedback_dialog()
