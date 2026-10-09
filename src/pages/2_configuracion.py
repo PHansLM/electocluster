@@ -385,7 +385,7 @@ if st.session_state.get("show_param_search", False):
         st.markdown("##### Alcance de búsqueda")
         search_cols = st.columns([1, 1, 1])
         with search_cols[0]:
-            sample_default = 500 if algorithm == "W-DBSCAN" else 300
+            sample_default = len(df_processed) if dataset_ready else 1706
             sample_max = max(100, len(df_processed)) if dataset_ready else 1000
             sample_size = st.number_input(
                 "Tamaño de muestra",
