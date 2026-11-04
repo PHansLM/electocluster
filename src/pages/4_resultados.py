@@ -763,7 +763,7 @@ with st.expander("Parametros, pesos y metadata", expanded=False):
 
 distribution = cluster_distribution(labels)
 profiles = cluster_profiles(df, labels)
-projection = pca_projection(df, labels)
+projection, pca_metadata = pca_projection(df, labels, return_metadata=True)
 profile_distances = cluster_profile_distance_matrix(df, labels)
 dimension_scores = cluster_dimension_scores(df, labels)
 semantic_profiles = cluster_semantic_profiles(df, labels)
@@ -928,6 +928,9 @@ with tab_projection:
         custom_data=["cluster_id", "semantic_summary"],
         title="Proyeccion PCA 2D de clusters",
     )
+    explained = pca_metadata["explained_variance_ratio"]
+    fig_projection.update_xaxes(title=f"PC1 ({explained['PC1']:.2f}% varianza)")
+    fig_projection.update_yaxes(title=f"PC2 ({explained['PC2']:.2f}% varianza)")
     fig_projection.update_traces(
         hovertemplate=(
             "<b>%{fullData.name}</b><br>Componente 1: %{x:.3f}<br>"
@@ -938,6 +941,16 @@ with tab_projection:
         fig_projection, ACTIVE_THEME, margin={"l": 25, "r": 20, "t": 55, "b": 45}
     )
     st.plotly_chart(fig_projection, width="stretch", config=PLOT_CONFIG_ES)
+    st.markdown("**Principales dimensiones base por componente**")
+    for component in ("PC1", "PC2"):
+        contributions = pca_metadata["top_contributions"][component]
+        st.markdown(f"**{component}**")
+        for item in contributions:
+            name = feature_display_name(item["feature"])
+            st.markdown(
+                f"- **{name}** (`{item['feature']}`): "
+                f"{item['contribution']:.2f}% de contribución"
+            )
 
 with tab_heatmap:
     st.markdown("#### ¿En qué características destaca cada grupo?")
