@@ -503,6 +503,28 @@ else:
             st.markdown(f"**Variables imputadas:** {len(vars_imputadas)}")
             st.caption(", ".join(vars_imputadas) if vars_imputadas else "Ninguna")
 
+            imputaciones = cleaning.get('imputaciones_por_variable', {})
+            if imputaciones:
+                st.markdown("**Detalle de imputación por variable:**")
+                imputacion_rows = [
+                    {
+                        "Variable": var,
+                        "Nombre": TODAS_VARIABLES.get(var, {}).get("nombre", ""),
+                        "Imputados": info.get("count", 0),
+                        "% imputado": f"{info.get('percentage', 0):.2f}%",
+                        "Estrategia": info.get("strategy", ""),
+                        "Valor utilizado": info.get("value", ""),
+                    }
+                    for var, info in imputaciones.items()
+                ]
+                st.dataframe(
+                    pd.DataFrame(imputacion_rows).sort_values(
+                        "Imputados", ascending=False
+                    ),
+                    width="stretch",
+                    hide_index=True,
+                )
+
             outliers = cleaning.get('outliers', {})
             if outliers:
                 st.markdown("**Outliers detectados (no eliminados):**")

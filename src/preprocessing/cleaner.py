@@ -31,7 +31,8 @@ class DataCleaner:
             'registros_originales': len(df),
             'registros_finales': len(df),  
             'registros_eliminados': 0,
-            'variables_imputadas': []
+            'variables_imputadas': [],
+            'imputaciones_por_variable': {}
         }
     
     def validate_ranges(self) -> pd.DataFrame:
@@ -94,12 +95,14 @@ class DataCleaner:
                 continue
             
             # Verificar si hay missings
-            n_missing = self.df[var_code].isnull().sum()
+            missing_mask = self.df[var_code].isnull()
+            n_missing = int(missing_mask.sum())
             if n_missing == 0:
                 continue
             
             tipo_var = var_info['tipo']
             estrategia = strategy.get(tipo_var, 'drop')
+            valor_imputar = None
 
             if tipo_var == 'binario' and 'mapeo_binario' in var_info:
                 mapeo = var_info['mapeo_binario']
@@ -115,7 +118,14 @@ class DataCleaner:
                 self.df[var_code].fillna(valor_imputar, inplace=True)
                 print(f"  ✓ {var_code}: {n_missing} missings imputados con moda ({valor_imputar})")
             
-            self.metadata['variables_imputadas'].append(var_code)
+            if estrategia in {'median', 'mode'}:
+                self.metadata['variables_imputadas'].append(var_code)
+                self.metadata['imputaciones_por_variable'][var_code] = {
+                    'count': n_missing,
+                    'percentage': round((n_missing / len(self.df)) * 100, 2),
+                    'strategy': estrategia,
+                    'value': valor_imputar,
+                }
         
         self.metadata['registros_finales'] = len(self.df) 
 
