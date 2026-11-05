@@ -1130,7 +1130,7 @@ def run_streamlit_checks() -> None:
             expected_tabs = {
                 "Resumen y perfiles",
                 "Resumen de grupos",
-                "Detalle semántico",
+                "Detalle por grupo",
                 "Proyección PCA",
                 "Diferencias",
                 "Vista relativa",
@@ -1154,16 +1154,20 @@ def run_streamlit_checks() -> None:
                 button.label for button in app.get("download_button")
             ]
             button_labels = [button.label for button in app.button]
-            assert "Descargar perfiles CSV" in download_labels, (
+            assert "Descargar perfiles descriptivos CSV" in download_labels, (
                 f"Legacy profiles download missing. Downloads: {download_labels}"
             )
             assert {
                 "Resumen semantico CSV",
                 "Distribuciones semanticas CSV",
-                "Perfiles semanticos JSON",
+                "Descargar perfiles semánticos JSON",
             } <= set(download_labels)
-            assert "Guardar figuras exportables" in button_labels, (
-                f"Figure export button missing. Buttons: {button_labels}"
+            assert "Descargar registro técnico JSON" in download_labels
+            assert not "st.json(" in (
+                PROJECT_ROOT / "src" / "pages" / "4_resultados.py"
+            ).read_text(encoding="utf-8")
+            assert "Descargar figuras exportables (ZIP)" in download_labels, (
+                f"Figure download missing. Downloads: {download_labels}"
             )
             assert "Descargar evidencia integrada JSON" not in download_labels, (
                 "Deprecated integrated evidence download is still exposed."

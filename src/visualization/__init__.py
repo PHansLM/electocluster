@@ -6,7 +6,8 @@ from .clustering_plots import (
     cluster_distribution,
     cluster_profiles,
     pca_projection,
-    save_run_figures,
+    build_pca_projection_png,
+    build_run_figures_zip,
 )
 from .cluster_explainability import (
     EXPLANATORY_DIMENSIONS,
@@ -39,6 +40,7 @@ __all__ = [
     "SUMMARY_COLUMNS",
     "SemanticProfileTables",
     "build_semantic_profile_export",
+    "build_pca_projection_png",
     "cluster_dimension_scores",
     "cluster_distribution",
     "cluster_profile_deviation",
@@ -48,7 +50,7 @@ __all__ = [
     "feature_display_name",
     "interpret_feature_value",
     "pca_projection",
-    "save_run_figures",
+    "build_run_figures_zip",
     "semantic_profile_heatmap",
     "top_distinctive_features",
 ]

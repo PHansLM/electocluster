@@ -23,7 +23,7 @@ from src.evaluation.execution import load_processed_dataset
 from src.evaluation.comparability import assess_run_comparability, run_evaluation_summary
 from src.evaluation.provenance import sha256_file, stored_dataset_sha256
 from src.evaluation.report_generator import ReportGenerator
-from src.evaluation.results_manager import RESULTS_PATH, ResultsManager
+from src.evaluation.results_manager import ResultsManager
 from src.ui import apply_app_shell
 from src.utils.constants import PROCESSED_DATA_PATH
 from src.visualization.plotly_config import (
@@ -51,7 +51,8 @@ from src.visualization import (
     feature_display_name,
     interpret_feature_value,
     pca_projection,
-    save_run_figures,
+    build_pca_projection_png,
+    build_run_figures_zip,
     semantic_profile_heatmap,
 )
 
@@ -81,6 +82,58 @@ def _format_metric(value, precision: int):
     if value is None:
         return "N/A"
     return f"{value:.{precision}f}"
+
+
+def _format_detail_value(value) -> str:
+    """Convierte valores tecnicos en texto breve para tablas de trazabilidad."""
+    if value is None:
+        return "No registrado"
+    if isinstance(value, bool):
+        return "Sí" if value else "No"
+    if isinstance(value, float):
+        return f"{value:.6g}"
+    if isinstance(value, (list, tuple)):
+        return ", ".join(_format_detail_value(item) for item in value)
+    return str(value)
+
+
+def _details_table(details: dict) -> pd.DataFrame:
+    """Aplana un diccionario para evitar mostrar JSON crudo en la interfaz."""
+    rows = []
+
+    def add_rows(prefix: str, value) -> None:
+        if isinstance(value, dict):
+            for key, child_value in value.items():
+                name = f"{prefix} · {key}" if prefix else str(key)
+                add_rows(name, child_value)
+            return
+        rows.append({"Campo": prefix, "Valor": _format_detail_value(value)})
+
+    add_rows("", details or {})
+    return pd.DataFrame(rows, columns=["Campo", "Valor"])
+
+
+def _comparison_summary_table(report: dict) -> pd.DataFrame:
+    """Prepara el resultado comparativo para una lectura directa en pantalla."""
+    summary = pd.DataFrame(report.get("summary", []))
+    if summary.empty:
+        return summary
+    columns = [
+        "algorithm", "n_clusters", "n_evaluated", "coverage_percentage",
+        "n_noise", "silhouette", "davies_bouldin", "calinski_harabasz",
+    ]
+    return summary[[column for column in columns if column in summary.columns]].rename(
+        columns={
+            "algorithm": "Algoritmo",
+            "n_clusters": "Clusters",
+            "n_evaluated": "Registros evaluados",
+            "coverage_percentage": "Cobertura (%)",
+            "n_noise": "Ruido",
+            "silhouette": "Silhouette",
+            "davies_bouldin": "Davies-Bouldin",
+            "calinski_harabasz": "Calinski-Harabasz",
+        }
+    )
 
 
 def _format_run_label(runs_df: pd.DataFrame, run_id: str) -> str:
@@ -437,6 +490,30 @@ def _render_profiles_table(profiles: pd.DataFrame):
     st.markdown(html, unsafe_allow_html=True)
 
 
+def _descriptive_profiles_export(profiles: pd.DataFrame) -> pd.DataFrame:
+    """Replica en CSV la lectura descriptiva de la tabla de perfiles."""
+    export = pd.DataFrame(index=profiles.index)
+    for column in profiles.columns:
+        if column in PROFILE_METADATA_COLUMNS:
+            labels = {
+                "cluster": "Cluster",
+                "size": "Registros",
+                "percentage": "Porcentaje",
+            }
+            export[labels.get(column, column)] = profiles[column].map(
+                lambda value: _format_profile_metadata(column, value)
+            )
+            continue
+
+        export[feature_display_name(column)] = profiles[column].map(
+            lambda value: (
+                f"{interpret_feature_value(column, value).text} "
+                f"({_format_profile_raw(interpret_feature_value(column, value).raw_value)})"
+            )
+        )
+    return export
+
+
 def _top_features_display(top_features: pd.DataFrame) -> pd.DataFrame:
     if top_features.empty:
         return top_features
@@ -742,18 +819,22 @@ metric_row_2[0].metric("Ruido", run.get("n_noise"))
 metric_row_2[1].metric("Silhouette", _format_metric(metrics.get("silhouette"), 4))
 metric_row_2[2].metric("Davies-Bouldin", _format_metric(metrics.get("davies_bouldin"), 4))
 
-with st.expander("Parametros, pesos y metadata", expanded=False):
+with st.expander("Trazabilidad técnica de la ejecución", expanded=False):
+    st.caption(
+        "Consulta aquí la configuración que produjo el resultado. La lectura principal "
+        "permanece en métricas, perfiles y diferencias."
+    )
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("**Parametros**")
-        st.json(run.get("params", {}))
-        st.markdown("**Metadata**")
-        st.json(run.get("metadata", {}))
+        st.markdown("**Parámetros usados**")
+        st.dataframe(_details_table(run.get("params", {})), hide_index=True)
+        st.markdown("**Datos de la ejecución**")
+        st.dataframe(_details_table(run.get("metadata", {})), hide_index=True)
     with c2:
-        st.markdown("**Snapshot de pesos**")
-        st.json(run.get("weights_snapshot", {}))
+        st.markdown("**Pesos usados**")
+        st.dataframe(_details_table(run.get("weights_snapshot", {})), hide_index=True)
         st.download_button(
-            "Descargar registro JSON",
+            "Descargar registro técnico JSON",
             data=json.dumps(run, indent=2, ensure_ascii=False).encode("utf-8"),
             file_name=f"{selected_run_id}.json",
             mime="application/json",
@@ -763,7 +844,7 @@ with st.expander("Parametros, pesos y metadata", expanded=False):
 
 distribution = cluster_distribution(labels)
 profiles = cluster_profiles(df, labels)
-projection, pca_metadata = pca_projection(df, labels, return_metadata=True)
+projection = pca_projection(df, labels)
 profile_distances = cluster_profile_distance_matrix(df, labels)
 dimension_scores = cluster_dimension_scores(df, labels)
 semantic_profiles = cluster_semantic_profiles(df, labels)
@@ -782,7 +863,7 @@ cluster_summaries = cluster_difference_summaries(semantic_differences)
         "Diferencias",
         "Distancias",
         "Dimensiones",
-        "Comparación",
+        "Comparación métrica",
     ],
     key="results_main_view",
     on_change="rerun",
@@ -790,7 +871,7 @@ cluster_summaries = cluster_difference_summaries(semantic_differences)
 
 with tab_summary:
     tab_dist, tab_profile_analysis, tab_projection = st.tabs(
-        ["Resumen de grupos", "Detalle semántico", "Proyección PCA"]
+        ["Resumen de grupos", "Detalle por grupo", "Proyección PCA"]
     )
 
 with tab_differences:
@@ -834,6 +915,7 @@ with tab_dist:
     if profiles.empty:
         st.warning("No hay perfiles disponibles para este run.")
     else:
+        visible_profiles = pd.DataFrame()
         profile_cluster_options = profiles["cluster"].tolist()
         profile_feature_options = [
             column for column in profiles.columns
@@ -845,19 +927,19 @@ with tab_dist:
             help="Agrega u oculta grupos y características en la tabla de perfiles.",
         ):
             st.caption(
-                "La selección solo cambia la vista. La descarga conserva el perfil completo."
+                "La selección cambia tanto la tabla como los campos incluidos en los CSV."
             )
             selected_profile_clusters = st.multiselect(
                 "Grupos visibles",
                 options=profile_cluster_options,
-                default=profile_cluster_options[: min(6, len(profile_cluster_options))],
+                default=profile_cluster_options,
                 format_func=lambda value: f"Grupo {int(value)}",
                 key=f"profile_clusters_{selected_run_id}",
             )
             selected_profile_features = st.multiselect(
                 "Características visibles",
                 options=profile_feature_options,
-                default=profile_feature_options[: min(8, len(profile_feature_options))],
+                default=profile_feature_options,
                 format_func=feature_display_name,
                 key=f"profile_features_{selected_run_id}",
             )
@@ -880,39 +962,71 @@ with tab_dist:
                 ]
             ]
             _render_profiles_table(visible_profiles)
-        csv = profiles.to_csv(index=False).encode("utf-8")
+            st.caption(
+                "Los CSV exportados mostrarán exactamente los grupos y características "
+                "que se ven en esta tabla."
+            )
+        descriptive_csv = _descriptive_profiles_export(visible_profiles).to_csv(
+            index=False
+        ).encode("utf-8")
+        values_csv = visible_profiles.to_csv(index=False).encode("utf-8")
     profile_export_col, figure_export_col = st.columns(2)
     with profile_export_col:
         if not profiles.empty:
-            st.download_button(
-                "Descargar perfiles CSV",
-                data=csv,
+            profile_descriptive, profile_values = st.columns(2)
+            profile_descriptive.download_button(
+                "Descargar perfiles descriptivos CSV",
+                data=descriptive_csv,
                 file_name=f"{selected_run_id}_perfiles.csv",
                 mime="text/csv",
                 icon=":material/download:",
                 width="stretch",
+                disabled=visible_profiles.empty,
+            )
+            profile_values.download_button(
+                "Descargar valores CSV",
+                data=values_csv,
+                file_name=f"{selected_run_id}_perfiles_valores.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                width="stretch",
+                disabled=visible_profiles.empty,
             )
 
-    save_figures = figure_export_col.button(
-        "Guardar figuras exportables",
-        icon=":material/save:",
+    def figures_zip_for_download():
+        return build_run_figures_zip(df, labels, selected_run_id)
+
+    figure_export_col.download_button(
+        "Descargar figuras exportables (ZIP)",
+        data=figures_zip_for_download,
+        file_name=f"{selected_run_id}_figuras.zip",
+        mime="application/zip",
+        icon=":material/download:",
+        help="Incluye la proyección, la distribución y, si aplica, el perfil por cluster.",
+        on_click="ignore",
         width="stretch",
     )
-    if save_figures:
-        paths = save_run_figures(
-            df=df,
-            labels=labels,
-            run_id=selected_run_id,
-            output_dir=RESULTS_PATH / "figures",
-        )
-        st.success("Figuras guardadas en results/figures.")
-        st.json(paths)
 
 with tab_projection:
     st.markdown("#### Proyeccion de apoyo")
     st.caption(
         "Proyeccion de apoyo. En 28 variables, la interpretacion principal debe "
         "venir de perfiles, diferencias y distancias entre perfiles."
+    )
+    axis_profiles = projection.attrs["axis_profiles"]
+    st.markdown("##### Lectura de los ejes")
+    pc1_column, pc2_column = st.columns(2)
+    for column, component in ((pc1_column, "PC1"), (pc2_column, "PC2")):
+        profile = axis_profiles[component]
+        with column.container(border=True):
+            st.markdown(f"**{component} — {profile['dimension']}**")
+            st.caption(
+                f"Extremo de menor valor: {profile['low_values']} · "
+                f"Extremo de mayor valor: {profile['high_values']}"
+            )
+    st.caption(
+        "Los valores próximos a 0 reflejan un perfil intermedio, sin rasgos claramente "
+        "distintivos en estas dimensiones."
     )
     projection["semantic_summary"] = projection["cluster_id"].map(
         lambda cluster_id: cluster_summaries.get(
@@ -928,9 +1042,6 @@ with tab_projection:
         custom_data=["cluster_id", "semantic_summary"],
         title="Proyeccion PCA 2D de clusters",
     )
-    explained = pca_metadata["explained_variance_ratio"]
-    fig_projection.update_xaxes(title=f"PC1 ({explained['PC1']:.2f}% varianza)")
-    fig_projection.update_yaxes(title=f"PC2 ({explained['PC2']:.2f}% varianza)")
     fig_projection.update_traces(
         hovertemplate=(
             "<b>%{fullData.name}</b><br>Componente 1: %{x:.3f}<br>"
@@ -941,16 +1052,20 @@ with tab_projection:
         fig_projection, ACTIVE_THEME, margin={"l": 25, "r": 20, "t": 55, "b": 45}
     )
     st.plotly_chart(fig_projection, width="stretch", config=PLOT_CONFIG_ES)
-    st.markdown("**Principales dimensiones base por componente**")
-    for component in ("PC1", "PC2"):
-        contributions = pca_metadata["top_contributions"][component]
-        st.markdown(f"**{component}**")
-        for item in contributions:
-            name = feature_display_name(item["feature"])
-            st.markdown(
-                f"- **{name}** (`{item['feature']}`): "
-                f"{item['contribution']:.2f}% de contribución"
-            )
+
+    def pca_projection_for_download():
+        return build_pca_projection_png(df, labels, selected_run_id)
+
+    st.download_button(
+        "Descargar proyección PCA 2D (PNG)",
+        data=pca_projection_for_download,
+        file_name=f"{selected_run_id}_pca_clusters.png",
+        mime="image/png",
+        icon=":material/download:",
+        help="Descarga la proyección de esta pestaña con sus notas de interpretación.",
+        on_click="ignore",
+        width="stretch",
+    )
 
 with tab_heatmap:
     st.markdown("#### ¿En qué características destaca cada grupo?")
@@ -1023,7 +1138,7 @@ with tab_heatmap:
                 st.write(
                     "Aquí se omiten categorías sin orden, como religión u ocupación, porque "
                     "sus códigos no indican más o menos. Sus porcentajes pueden consultarse "
-                    "en Detalle semántico y Magnitudes reales. Variables omitidas: "
+                    "en Detalle por grupo y Magnitudes reales. Variables omitidas: "
                     + ", ".join(feature_display_name(code)
                                 for code in heatmap.excluded_nominal_features) + "."
                 )
@@ -1202,12 +1317,12 @@ with tab_profile_analysis:
             allow_nan=False,
         ).encode("utf-8")
 
-        st.markdown("#### Exportar evidencia completa")
+        st.markdown("#### Descargar evidencia")
         st.caption(
-            "Las descargas incluyen todos los clusters y variables. Los CSV conservan "
-            "porcentajes numericos; el JSON agrega trazabilidad del run y del dataset."
+            "Los CSV incluyen todos los clusters y variables, en tablas listas para "
+            "analizar."
         )
-        export_summary, export_distributions, export_json = st.columns(3)
+        export_summary, export_distributions = st.columns(2)
         with export_summary:
             st.download_button(
                 "Resumen semantico CSV",
@@ -1226,9 +1341,13 @@ with tab_profile_analysis:
                 icon=":material/download:",
                 width="stretch",
             )
-        with export_json:
+        with st.expander("Trazabilidad técnica de perfiles", expanded=False):
+            st.caption(
+                "El JSON conserva el detalle estructurado del run y del dataset para "
+                "reproducibilidad; no es necesario para interpretar los perfiles."
+            )
             st.download_button(
-                "Perfiles semanticos JSON",
+                "Descargar perfiles semánticos JSON",
                 data=semantic_json,
                 file_name=f"{selected_run_id}_perfiles_semanticos.json",
                 mime="application/json",
@@ -1821,10 +1940,65 @@ with tab_compare:
             icon=":material/description:",
         ):
             report = ReportGenerator(rm).compare_runs(compare_ids)
+            st.session_state["latest_comparison_report"] = report
+
+        report = st.session_state.get("latest_comparison_report")
+        if report and set(report.get("runs_compared", [])) == set(compare_ids):
             st.success(
-                f"Reporte generado: {report['report_name']}",
+                f"Reporte comparativo generado: {report['report_name']}",
                 icon=":material/check_circle:",
             )
-            st.json(report)
+            st.markdown("#### Lectura del reporte")
+            st.caption(
+                "Compara las ejecuciones con las mismas condiciones. Si no son "
+                "comparables, esta tabla sigue siendo descriptiva, no un ranking."
+            )
+            comparison_report_table = _comparison_summary_table(report)
+            st.dataframe(
+                comparison_report_table,
+                hide_index=True,
+                column_config={
+                    "Cobertura (%)": st.column_config.NumberColumn(format="%.2f"),
+                    "Silhouette": st.column_config.NumberColumn(format="%.4f"),
+                    "Davies-Bouldin": st.column_config.NumberColumn(format="%.4f"),
+                    "Calinski-Harabasz": st.column_config.NumberColumn(format="%.2f"),
+                },
+            )
+            comparability = report.get("comparability", {})
+            if comparability.get("directly_comparable"):
+                best = report.get("best_by_metric", {})
+                st.info(
+                    "Mejor valor por métrica: "
+                    f"Silhouette — {best.get('silhouette', 'No disponible')}; "
+                    f"Davies-Bouldin — {best.get('davies_bouldin', 'No disponible')}; "
+                    f"Calinski-Harabasz — {best.get('calinski_harabasz', 'No disponible')}."
+                )
+            else:
+                reasons = comparability.get("reasons", [])
+                st.warning(
+                    "No se establece un ranking porque las ejecuciones no son "
+                    "directamente comparables. " + " ".join(reasons),
+                    icon=":material/info:",
+                )
+            download_csv, download_json = st.columns(2)
+            with download_csv:
+                st.download_button(
+                    "Descargar comparación métrica CSV",
+                    data=comparison_report_table.to_csv(index=False).encode("utf-8-sig"),
+                    file_name=f"{report['report_name']}.csv",
+                    mime="text/csv",
+                    icon=":material/download:",
+                    width="stretch",
+                )
+            with download_json:
+                with st.expander("JSON técnico", expanded=False):
+                    st.download_button(
+                        "Descargar trazabilidad JSON",
+                        data=json.dumps(report, indent=2, ensure_ascii=False).encode("utf-8"),
+                        file_name=f"{report['report_name']}.json",
+                        mime="application/json",
+                        icon=":material/download:",
+                        width="stretch",
+                    )
     else:
         st.caption("Selecciona al menos dos ejecuciones para generar un reporte comparativo.")

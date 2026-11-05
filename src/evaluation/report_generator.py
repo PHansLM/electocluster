@@ -1,8 +1,9 @@
 """
 ReportGenerator: genera reportes comparativos entre ejecuciones de clustering.
-Produce JSON estructurado y texto plano en results/comparisons/ y results/reports/.
+Produce JSON estructurado y CSV tabular en results/comparisons/ y results/reports/.
 """
 
+import csv
 import json
 from datetime import datetime
 from pathlib import Path
@@ -98,7 +99,7 @@ class ReportGenerator:
         with open(comp_path, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
 
-        self._save_text_report(report)
+        self._save_csv_report(report)
         return report
 
     def generate_run_summary(self, run_id: str) -> str:
@@ -126,44 +127,33 @@ class ReportGenerator:
         ]
         return "\n".join(lines)
 
-    def _save_text_report(self, report: dict):
-        """Guarda un reporte comparativo legible en texto plano."""
-        lines = [
-            f"REPORTE COMPARATIVO - {report['report_name']}",
-            f"Generado: {report['generated_at']}",
-            "=" * 70,
-            "",
-            f"{'Algoritmo':<24} {'Clusters':>8} {'Evaluadas':>10} {'Cobertura':>10} {'Ruido':>8} "
-            f"{'Silhouette':>12} {'D-Bouldin':>12} {'Calinski-H':>12}",
-            "-" * 104,
-        ]
-
+    def _save_csv_report(self, report: dict):
+        """Guarda las métricas comparadas en un CSV, una fila por ejecución."""
+        comparability = report["comparability"]
+        reasons = " | ".join(comparability.get("reasons", []))
+        rows = []
         for summary in report["summary"]:
-            sil = self._format_metric(summary["silhouette"], precision=4)
-            db = self._format_metric(summary["davies_bouldin"], precision=4)
-            ch = self._format_metric(summary["calinski_harabasz"], precision=2)
-            coverage = self._format_percentage(summary["coverage_percentage"])
-            lines.append(
-                f"{summary['algorithm']:<24} {summary['n_clusters']:>8} "
-                f"{summary['n_evaluated']:>10} {coverage:>10} {summary['n_noise']:>8} "
-                f"{sil:>12} {db:>12} {ch:>12}"
-            )
+            rows.append({
+                "reporte": report["report_name"],
+                "generado_en": report["generated_at"],
+                "ejecucion": summary["run_id"],
+                "algoritmo": summary["algorithm"],
+                "clusters": summary["n_clusters"],
+                "registros_evaluados": summary["n_evaluated"],
+                "cobertura_porcentaje": summary["coverage_percentage"],
+                "ruido": summary["n_noise"],
+                "silhouette": summary["silhouette"],
+                "davies_bouldin": summary["davies_bouldin"],
+                "calinski_harabasz": summary["calinski_harabasz"],
+                "comparables_directamente": comparability["directly_comparable"],
+                "motivo_sin_ranking": reasons,
+            })
 
-        lines += ["-" * 104, ""]
-        if report["comparability"]["directly_comparable"]:
-            lines += [
-                "MEJOR POR METRICA:",
-                f"  Silhouette (mayor es mejor):        {report['best_by_metric'].get('silhouette', 'N/A')}",
-                f"  Davies-Bouldin (menor es mejor):    {report['best_by_metric'].get('davies_bouldin', 'N/A')}",
-                f"  Calinski-Harabasz (mayor es mejor): {report['best_by_metric'].get('calinski_harabasz', 'N/A')}",
-            ]
-        else:
-            lines.append("RANKING NO DISPONIBLE:")
-            lines.extend(f"  - {reason}" for reason in report["comparability"]["reasons"])
-
-        report_path = self.results_path / "reports" / f"{report['report_name']}.txt"
-        with open(report_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines))
+        report_path = self.results_path / "reports" / f"{report['report_name']}.csv"
+        with open(report_path, "w", encoding="utf-8-sig", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
 
     @staticmethod
     def _metric_value(metrics: dict, key: str):
