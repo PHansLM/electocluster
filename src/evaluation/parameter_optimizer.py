@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable
 
 import numpy as np
 import pandas as pd
@@ -18,7 +18,7 @@ from sklearn.neighbors import NearestNeighbors
 
 from src.clustering.weighted import WKMedoids, WDBSCAN, WeightedHierarchicalClustering
 from src.evaluation.execution import _UniformWeightManager
-from src.evaluation.metrics import calculate_metrics
+from src.evaluation.metrics import calculate_metrics, calculate_weighted_geometry_metrics
 from src.weighting.weight_manager import WeightManager
 
 
@@ -49,14 +49,18 @@ def optimize_wkmedoids_params(
     k_values: Iterable[int],
     sample_size: int = 300,
     random_state: int = 42,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> ParameterSearchResult:
     """Busca k para WKMedoids maximizando Silhouette en muestra."""
     sample = sample_dataset(df, sample_size=sample_size, random_state=random_state)
     rows = []
+    candidates = [
+        k for k in sorted(set(int(value) for value in k_values))
+        if 2 <= k < len(sample)
+    ]
+    total = len(candidates)
 
-    for k in sorted(set(int(value) for value in k_values)):
-        if k < 2 or k >= len(sample):
-            continue
+    for completed, k in enumerate(candidates, start=1):
         model = WKMedoids(
             n_clusters=k,
             random_state=random_state,
@@ -72,6 +76,8 @@ def optimize_wkmedoids_params(
             "calinski_harabasz": metrics.get("calinski_harabasz"),
             "inertia": float(model.inertia_) if model.inertia_ is not None else None,
         })
+        if on_progress is not None:
+            on_progress(completed, total, f"Evaluado k={k}")
 
     best = _best_row(rows)
     best_params = {
@@ -99,30 +105,48 @@ def optimize_whierarchical_params(
     linkages: Iterable[str],
     sample_size: int = 300,
     random_state: int = 42,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> ParameterSearchResult:
-    """Busca k y linkage para W-Hierarchical maximizando Silhouette."""
+    """Busca k y linkage en la misma geometría ponderada del aglomerativo."""
     sample = sample_dataset(df, sample_size=sample_size, random_state=random_state)
     rows = []
+    candidates = [
+        (linkage, k)
+        for linkage in linkages
+        for k in sorted(set(int(value) for value in k_values))
+        if 2 <= k < len(sample)
+    ]
+    total = len(candidates)
 
-    for linkage in linkages:
-        for k in sorted(set(int(value) for value in k_values)):
-            if k < 2 or k >= len(sample):
-                continue
-            model = WeightedHierarchicalClustering(
-                n_clusters=k,
-                linkage=linkage,
-                weight_manager=weight_manager,
-            )
-            model.fit(sample)
-            metrics = _safe_metrics(sample, model.labels_)
-            rows.append({
-                "n_clusters": k,
-                "linkage": linkage,
-                "silhouette": metrics.get("silhouette"),
-                "davies_bouldin": metrics.get("davies_bouldin"),
-                "calinski_harabasz": metrics.get("calinski_harabasz"),
-            })
+    for completed, (linkage, k) in enumerate(candidates, start=1):
+        model = WeightedHierarchicalClustering(
+            n_clusters=k,
+            linkage=linkage,
+            weight_manager=weight_manager,
+        )
+        model.fit(sample)
+        metrics = _safe_metrics(
+            sample,
+            model.labels_,
+            weight_manager=weight_manager,
+            weighted_geometry=True,
+        )
+        rows.append({
+            "n_clusters": k,
+            "linkage": linkage,
+            "silhouette": metrics.get("silhouette"),
+            "davies_bouldin": metrics.get("davies_bouldin"),
+            "calinski_harabasz": metrics.get("calinski_harabasz"),
+            "estado": (
+                "Válido"
+                if _finite(metrics.get("silhouette"))
+                else "Sin métricas válidas"
+            ),
+        })
+        if on_progress is not None:
+            on_progress(completed, total, f"Evaluados k={k}, linkage={linkage}")
 
+    _rank_rows(rows)
     best = _best_row(rows)
     best_params = {
         "n_clusters": int(best["n_clusters"]),
@@ -134,9 +158,14 @@ def optimize_whierarchical_params(
         best_params=best_params,
         rows=rows,
         sample_size=len(sample),
-        criterion="Mayor Silhouette; Davies-Bouldin como apoyo",
+        criterion=(
+            "Mayor Silhouette ponderado; Davies-Bouldin y Calinski-Harabasz "
+            "ponderados como desempates"
+        ),
         notes=[
-            "Busqueda calculada sobre muestra para controlar memoria.",
+            "Cada candidato usa la distancia ponderada sqrt(sum(wᵢ·Δᵢ²)) del modelo.",
+            "La búsqueda se calcula sobre una muestra reproducible para controlar memoria.",
+            "Confirma la alternativa elegida con una ejecución sobre el dataset completo.",
             "Las etiquetas y el dendrograma usan el mismo enlace seleccionado.",
         ],
     )
@@ -149,6 +178,7 @@ def optimize_wdbscan_params(
     random_state: int = 42,
     variance_target: float = 0.85,
     min_samples_values: Iterable[int] | None = None,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> ParameterSearchResult:
     """
     Recomienda eps, min_samples y PCA para W-DBSCAN.
@@ -179,7 +209,7 @@ def optimize_wdbscan_params(
     if min_samples_values is None:
         min_samples_values = _default_min_samples(n_components, len(sample))
 
-    rows = []
+    candidate_specs = []
     for min_samples in sorted(set(int(value) for value in min_samples_values)):
         if min_samples < 2 or min_samples >= len(df_pca):
             continue
@@ -191,31 +221,47 @@ def optimize_wdbscan_params(
             if elbow_eps * factor > 0
         })
 
-        for eps in eps_candidates:
-            model = WDBSCAN(
-                eps=eps,
-                min_samples=min_samples,
-                weight_manager=_UniformWeightManager(df_pca.columns.tolist()),
+        candidate_specs.extend(
+            (min_samples, eps, elbow_idx, elbow_eps)
+            for eps in eps_candidates
+        )
+
+    rows = []
+    total = len(candidate_specs)
+    for completed, (min_samples, eps, elbow_idx, elbow_eps) in enumerate(
+        candidate_specs,
+        start=1,
+    ):
+        model = WDBSCAN(
+            eps=eps,
+            min_samples=min_samples,
+            weight_manager=_UniformWeightManager(df_pca.columns.tolist()),
+        )
+        model.fit(df_pca)
+        labels = np.asarray(model.labels_, dtype=int)
+        mask = labels != -1
+        metrics = _safe_metrics(df_pca.loc[mask], labels[mask])
+        noise_pct = float((labels == -1).sum() / len(labels) * 100)
+        rows.append({
+            "eps": eps,
+            "min_samples": min_samples,
+            "pca_components": n_components,
+            "pca_explained_variance": float(pca.explained_variance_ratio_.sum()),
+            "elbow_eps": float(elbow_eps),
+            "elbow_index": int(elbow_idx),
+            "n_clusters": int(len(set(label for label in labels if label != -1))),
+            "n_noise": int((labels == -1).sum()),
+            "noise_percentage": noise_pct,
+            "silhouette": metrics.get("silhouette"),
+            "davies_bouldin": metrics.get("davies_bouldin"),
+            "calinski_harabasz": metrics.get("calinski_harabasz"),
+        })
+        if on_progress is not None:
+            on_progress(
+                completed,
+                total,
+                f"Evaluados eps={eps}, min_samples={min_samples}",
             )
-            model.fit(df_pca)
-            labels = np.asarray(model.labels_, dtype=int)
-            mask = labels != -1
-            metrics = _safe_metrics(df_pca.loc[mask], labels[mask])
-            noise_pct = float((labels == -1).sum() / len(labels) * 100)
-            rows.append({
-                "eps": eps,
-                "min_samples": min_samples,
-                "pca_components": n_components,
-                "pca_explained_variance": float(pca.explained_variance_ratio_.sum()),
-                "elbow_eps": float(elbow_eps),
-                "elbow_index": int(elbow_idx),
-                "n_clusters": int(len(set(label for label in labels if label != -1))),
-                "n_noise": int((labels == -1).sum()),
-                "noise_percentage": noise_pct,
-                "silhouette": metrics.get("silhouette"),
-                "davies_bouldin": metrics.get("davies_bouldin"),
-                "calinski_harabasz": metrics.get("calinski_harabasz"),
-            })
 
     best = _best_row(rows)
     if best:
@@ -255,7 +301,13 @@ def _apply_weights(df: pd.DataFrame, weight_manager: WeightManager) -> pd.DataFr
     return df * weights
 
 
-def _safe_metrics(df: pd.DataFrame, labels: np.ndarray) -> dict:
+def _safe_metrics(
+    df: pd.DataFrame,
+    labels: np.ndarray,
+    *,
+    weight_manager: WeightManager | None = None,
+    weighted_geometry: bool = False,
+) -> dict:
     labels = np.asarray(labels)
     if len(labels) == 0:
         return {"silhouette": None, "davies_bouldin": None, "calinski_harabasz": None}
@@ -263,28 +315,55 @@ def _safe_metrics(df: pd.DataFrame, labels: np.ndarray) -> dict:
     if len(unique) < 2 or len(unique) >= len(labels):
         return {"silhouette": None, "davies_bouldin": None, "calinski_harabasz": None}
     try:
+        if weighted_geometry:
+            if weight_manager is None:
+                raise ValueError("Se requiere WeightManager para la geometría ponderada.")
+            return calculate_weighted_geometry_metrics(df, labels, weight_manager)
         return calculate_metrics(df, labels)
     except ValueError:
         return {"silhouette": None, "davies_bouldin": None, "calinski_harabasz": None}
 
 
 def _best_row(rows: list[dict]) -> dict | None:
-    valid_rows = [row for row in rows if _finite(row.get("silhouette"))]
+    valid_rows = _sorted_valid_rows(rows)
     if not valid_rows:
         return None
+    return valid_rows[0]
+
+
+def _sorted_valid_rows(rows: list[dict]) -> list[dict]:
+    """Orden reproducible: Silhouette, Davies-Bouldin y Calinski-Harabasz."""
+    valid_rows = [row for row in rows if _finite(row.get("silhouette"))]
     return sorted(
         valid_rows,
         key=lambda row: (
-            row["silhouette"],
-            -row["davies_bouldin"] if _finite(row.get("davies_bouldin")) else -math.inf,
-            row["calinski_harabasz"] if _finite(row.get("calinski_harabasz")) else -math.inf,
+            float(row["silhouette"]),
+            -float(row["davies_bouldin"])
+            if _finite(row.get("davies_bouldin")) else -math.inf,
+            float(row["calinski_harabasz"])
+            if _finite(row.get("calinski_harabasz")) else -math.inf,
+            -int(row.get("n_clusters", 0)),
+            str(row.get("linkage", "")),
         ),
         reverse=True,
-    )[0]
+    )
+
+
+def _rank_rows(rows: list[dict]) -> None:
+    """Anota el orden de la recomendación sin ocultar candidatos inválidos."""
+    for row in rows:
+        row["orden de recomendación"] = None
+    for position, row in enumerate(_sorted_valid_rows(rows), start=1):
+        row["orden de recomendación"] = position
 
 
 def _finite(value) -> bool:
-    return value is not None and not (isinstance(value, float) and math.isnan(value))
+    if value is None:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
 
 
 def _default_min_samples(n_components: int, n_samples: int) -> list[int]:
