@@ -6,6 +6,7 @@ Complementa DataPreprocessor sin modificarlo.
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from typing import Callable
 from .loader import load_dataset
 from .cleaner import clean_dataset_configured
 from .transformer import transform_dataset
@@ -37,6 +38,7 @@ def run_pipeline_configured(
     config: PreprocessingConfig = None,
     save_report_path: str = None,
     report_metadata: dict = None,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> tuple:
     """
     Ejecuta el pipeline de preprocesamiento con configuración parametrizable.
@@ -56,10 +58,17 @@ def run_pipeline_configured(
         config = PreprocessingConfig()
 
     reporter = PreprocessingReporter()
+    total_steps = 5
+
+    def notify(completed: int, message: str) -> None:
+        if on_progress is not None:
+            on_progress(completed, total_steps, message)
 
     # PASO 1: CARGA
+    notify(0, "Cargando y verificando el dataset...")
     df_raw, load_metadata = load_dataset(filepath)
     reporter.add_section('loading', load_metadata)
+    notify(1, "Dataset cargado; iniciando limpieza...")
 
     # PASO 2: LIMPIEZA
     df_clean, clean_report = clean_dataset_configured(
@@ -73,6 +82,7 @@ def run_pipeline_configured(
         outlier_threshold=config.outlier_threshold,
     )
     reporter.add_section('cleaning', clean_report)
+    notify(2, "Limpieza completada; construyendo variables derivadas...")
 
     # PASO 3: FEATURE ENGINEERING
     df_engineered, _, engineering_report = engineer_features(
@@ -83,6 +93,7 @@ def run_pipeline_configured(
         drop_originals=config.drop_originals,
     )
     reporter.add_section('feature_engineering', engineering_report)
+    notify(3, "Variables derivadas listas; aplicando transformaciones...")
 
     # PASO 4: TRANSFORMACIÓN
     df_transformed, _, transform_report = transform_dataset(
@@ -92,6 +103,7 @@ def run_pipeline_configured(
         normalization_method=config.normalization_method,
     )
     reporter.add_section('transformation', transform_report)
+    notify(4, "Transformaciones completadas; guardando resultados...")
 
     # GUARDAR CSV
     output_path = Path(PROCESSED_DATA_PATH)
@@ -107,5 +119,7 @@ def run_pipeline_configured(
         output_report_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_report_path, 'w', encoding='utf-8') as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
+
+    notify(5, "Dataset procesado y reporte guardados.")
 
     return df_transformed, report

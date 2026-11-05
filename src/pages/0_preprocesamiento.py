@@ -7,6 +7,7 @@ y visualizar el reporte resultante.
 import sys
 import json
 import re
+import time
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -27,9 +28,35 @@ from src.utils.constants import (
     TODAS_VARIABLES,
 )
 from src.ui import apply_app_shell
+from src.ui_feedback import queue_feedback, show_feedback_dialog
 
 
 UPLOADS_PATH = PROJECT_ROOT / "data" / "uploads"
+PIPELINE_STEP_LABELS = [
+    "Cargar y verificar el dataset",
+    "Limpiar datos y resolver valores faltantes",
+    "Construir variables derivadas",
+    "Codificar y normalizar variables",
+    "Guardar el dataset procesado y su reporte",
+]
+
+
+def _render_pipeline_steps(placeholder, state: dict) -> None:
+    completed = int(state.get("completed", 0))
+    active = state.get("active")
+    failed = state.get("failed")
+    lines = ["**Progreso del preprocesamiento**"]
+    for index, label in enumerate(PIPELINE_STEP_LABELS):
+        if index < completed:
+            marker = ":green[:material/check_circle:]"
+        elif index == failed:
+            marker = ":red[:material/error:]"
+        elif index == active:
+            marker = ":blue[:material/progress_activity:]"
+        else:
+            marker = ":gray[:material/radio_button_unchecked:]"
+        lines.append(f"- {marker} {label}")
+    placeholder.markdown("\n".join(lines))
 
 
 def _safe_filename(filename: str) -> str:
@@ -252,8 +279,8 @@ st.markdown("---")
 # ── Configuración del pipeline ────────────────────────────────────────────────
 st.markdown("### Configuración del pipeline")
 st.caption(
-    "Los valores por defecto replican el comportamiento base validado en la iteración 1. "
-    "Modifícalos solo si experimentas con variantes del preprocesamiento."
+    "Los valores por defecto replica el comportamiento documentado. "
+    "Modificar para experimentar con variantes del preprocesamiento."
 )
 
 tab_limpieza, tab_engineering, tab_transformacion = st.tabs(
@@ -303,11 +330,40 @@ with tab_limpieza:
                 index=0,
                 help="IQR: Rango intercuartílico (robusto ante distribuciones asimétricas). Z-score: distancia a la media.",
             )
-            outlier_threshold = st.number_input(
-                "Umbral IQR / Z-score",
-                min_value=1.0, max_value=5.0, value=1.5, step=0.1,
-                help="IQR: 1.5 es el estándar. Z-score: 3.0 es el estándar.",
-            )
+            if outlier_method == "iqr":
+                outlier_threshold = st.number_input(
+                    "Sensibilidad para detectar valores atípicos (IQR)",
+                    min_value=1.0,
+                    max_value=5.0,
+                    value=1.5,
+                    step=0.1,
+                    help=(
+                        "Un valor menor marca más observaciones como atípicas. "
+                        "Un valor mayor solo marca casos más extremos."
+                    ),
+                )
+                st.caption(
+                    "Con **1,5** se usa el criterio habitual. Si lo bajas, el detector es más "
+                    "estricto y reporta más casos; si lo subes, tolera más variación y reporta "
+                    "menos. Los casos solo se señalan en el reporte: no se eliminan."
+                )
+            else:
+                outlier_threshold = st.number_input(
+                    "Distancia mínima para considerar un valor atípico (Z-score)",
+                    min_value=1.0,
+                    max_value=5.0,
+                    value=3.0,
+                    step=0.1,
+                    help=(
+                        "Indica cuántas desviaciones estándar debe alejarse un valor de la media. "
+                        "Menos distancia detecta más casos; más distancia detecta solo los extremos."
+                    ),
+                )
+                st.caption(
+                    "Con **3,0** se señalan valores muy alejados del promedio. Si lo bajas, "
+                    "aparecerán más casos como atípicos; si lo subes, solo aparecerán los más "
+                    "extremos. Los casos solo se señalan en el reporte: no se eliminan."
+                )
         else:
             outlier_method = 'iqr'
             outlier_threshold = 1.5
@@ -318,19 +374,12 @@ with tab_engineering:
     with col1:
         st.markdown("**Índice de riqueza material (variables R)**")
         build_wealth = st.toggle("Construir wealth_index", value=True)
+        wealth_method = 'sum'
         if build_wealth:
-            wealth_method = st.radio(
-                "Método de construcción",
-                options=["sum", "pca"],
-                index=0,
-                format_func=lambda x: {
-                    "sum": "Suma simple (0-10, interpretación directa)",
-                    "pca": "Primer componente PCA (pesos diferenciados)",
-                }[x],
-                help="Suma simple: cada bien tiene igual peso. PCA: pesos según varianza explicada.",
+            st.caption(
+                "Se calcula como una suma simple de bienes del hogar, con resultado de 0 a 10: "
+                "un valor mayor indica que el hogar dispone de más bienes incluidos en el índice."
             )
-        else:
-            wealth_method = 'sum'
 
     with col2:
         st.markdown("**Índice de participación cívica (variables CP)**")
@@ -392,6 +441,11 @@ with col_note:
         "Si cargas un dataset externo, reemplazará temporalmente el dataset procesado activo."
     )
 
+steps_placeholder = st.empty()
+saved_step_state = st.session_state.get("preprocessing_step_state")
+if saved_step_state:
+    _render_pipeline_steps(steps_placeholder, saved_step_state)
+
 if run_button:
     config = PreprocessingConfig(
         validate_ranges=validate_ranges,
@@ -410,9 +464,35 @@ if run_button:
         normalization_method=normalization_method,
     )
 
-    with st.spinner("Ejecutando pipeline de preprocesamiento..."):
-        log_container = st.empty()
-        try:
+    progress_state = {
+        "completed": 0,
+        "active": 0,
+        "failed": None,
+        "started_at": time.monotonic(),
+    }
+    st.session_state["preprocessing_step_state"] = {
+        key: value for key, value in progress_state.items() if key != "started_at"
+    }
+    _render_pipeline_steps(steps_placeholder, progress_state)
+    minimum_step_seconds = float(
+        st.session_state.get("_preprocessing_step_min_seconds", 1.0)
+    )
+
+    def update_pipeline_progress(completed: int, total: int, _message: str) -> None:
+        if completed > progress_state["completed"]:
+            elapsed = time.monotonic() - progress_state["started_at"]
+            remaining = minimum_step_seconds - elapsed
+            if remaining > 0:
+                time.sleep(remaining)
+            progress_state["completed"] = completed
+            progress_state["active"] = completed if completed < total else None
+            progress_state["started_at"] = time.monotonic()
+        st.session_state["preprocessing_step_state"] = {
+            key: value for key, value in progress_state.items() if key != "started_at"
+        }
+        _render_pipeline_steps(steps_placeholder, progress_state)
+
+    try:
             df_result, report = run_pipeline_configured(
                 str(selected_dataset_path),
                 config=config,
@@ -421,20 +501,58 @@ if run_button:
                     "source_dataset": str(selected_dataset_path),
                     "source_label": selected_source_label,
                 },
+                on_progress=update_pipeline_progress,
             )
             st.session_state['preprocessing_report'] = report
             st.session_state['preprocessing_config'] = config
             st.session_state['active_dataset_source'] = str(selected_dataset_path)
-            st.success(
-                f"Pipeline completado. Dataset procesado: "
-                f"**{len(df_result):,} registros × {len(df_result.columns)} variables** · "
-                f"0 missings.",
-                icon=":material/check_circle:",
+            missing_count = int(df_result.isna().sum().sum())
+            if missing_count == 0:
+                feedback_kind = "success"
+                feedback_title = "Preprocesamiento completado"
+                outcome_message = (
+                    "sin valores faltantes. Ya está disponible en Configuración y Ejecución."
+                )
+            else:
+                feedback_kind = "warning"
+                feedback_title = "Preprocesamiento completado con observaciones"
+                missing_label = (
+                    "1 valor faltante"
+                    if missing_count == 1
+                    else f"{missing_count:,} valores faltantes"
+                )
+                outcome_message = (
+                    f"con {missing_label}. El archivo fue guardado, pero "
+                    "Ejecución no podrá utilizarlo hasta resolver los faltantes."
+                )
+            success_message = (
+                "El pipeline terminó y guardó el dataset procesado: "
+                f"{len(df_result):,} registros × {len(df_result.columns)} variables, "
+                + outcome_message
+            )
+            queue_feedback(
+                feedback_kind,
+                feedback_title,
+                success_message,
             )
             st.rerun()
-        except Exception as e:
-            st.error(f"Error en el pipeline: {e}", icon=":material/error:")
-            st.exception(e)
+    except Exception as e:
+        progress_state["failed"] = progress_state["active"]
+        progress_state["active"] = None
+        st.session_state["preprocessing_step_state"] = {
+            key: value for key, value in progress_state.items() if key != "started_at"
+        }
+        _render_pipeline_steps(steps_placeholder, progress_state)
+        queue_feedback(
+            "error",
+            "No se pudo completar el preprocesamiento",
+            "El dataset procesado no fue confirmado como listo. Revisa el detalle "
+            "antes de volver a ejecutar el pipeline.",
+            details=f"{type(e).__name__}: {e}",
+        )
+        st.rerun()
+
+show_feedback_dialog()
 
 st.markdown("---")
 
@@ -502,28 +620,6 @@ else:
             vars_imputadas = cleaning.get('variables_imputadas', [])
             st.markdown(f"**Variables imputadas:** {len(vars_imputadas)}")
             st.caption(", ".join(vars_imputadas) if vars_imputadas else "Ninguna")
-
-            imputaciones = cleaning.get('imputaciones_por_variable', {})
-            if imputaciones:
-                st.markdown("**Detalle de imputación por variable:**")
-                imputacion_rows = [
-                    {
-                        "Variable": var,
-                        "Nombre": TODAS_VARIABLES.get(var, {}).get("nombre", ""),
-                        "Imputados": info.get("count", 0),
-                        "% imputado": f"{info.get('percentage', 0):.2f}%",
-                        "Estrategia": info.get("strategy", ""),
-                        "Valor utilizado": info.get("value", ""),
-                    }
-                    for var, info in imputaciones.items()
-                ]
-                st.dataframe(
-                    pd.DataFrame(imputacion_rows).sort_values(
-                        "Imputados", ascending=False
-                    ),
-                    width="stretch",
-                    hide_index=True,
-                )
 
             outliers = cleaning.get('outliers', {})
             if outliers:
