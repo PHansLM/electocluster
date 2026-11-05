@@ -208,8 +208,9 @@ class UIFeedbackTest(unittest.TestCase):
         self.execution_page()
         with patch("src.evaluation.execution.run_clustering_experiment", side_effect=[self.execution_result(), RuntimeError("Fallo de algoritmo")]):
             self.click("Ejecutar seleccion")
-        self.feedback("error")
+        self.feedback("warning")
         feedback = self.app.session_state["operation_feedback"]
+        self.assertIn("Ejecución incompleta", feedback["message"])
         self.assertIn("Falló W-Hierarchical Clustering", feedback["message"])
         self.assertIn("1 de 3", feedback["message"])
         self.assertEqual(self.app.session_state["last_suite_run_ids"], ["test_WKMedoids"])
@@ -237,7 +238,8 @@ class UIFeedbackTest(unittest.TestCase):
 
         with patch("src.evaluation.canonical_suite.run_canonical_suite", side_effect=fail_suite):
             self.click("Ejecutar seleccion")
-        self.feedback("error")
+        self.feedback("warning")
+        self.assertIn("Ejecución incompleta", self.app.session_state["operation_feedback"]["message"])
         self.assertEqual(self.app.session_state["last_suite_run_ids"], ["test_WKMedoids"])
         self.click("Entendido")
         results = [self.execution_result(name) for name in (

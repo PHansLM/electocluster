@@ -142,13 +142,68 @@ def _format_results_table(rows: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     if df.empty:
         return df
-    for col in ["silhouette", "davies_bouldin", "calinski_harabasz", "eps", "elbow_eps"]:
+    for col in [
+        "silhouette", "davies_bouldin", "calinski_harabasz", "eps", "elbow_eps",
+        "Δ Silhouette vs canónica", "Δ Davies-Bouldin vs canónica",
+        "Δ Calinski-Harabasz vs canónica",
+    ]:
         if col in df.columns:
             df[col] = df[col].astype(float).round(4)
     for col in ["pca_explained_variance", "noise_percentage"]:
         if col in df.columns:
             df[col] = df[col].astype(float).round(3)
     return df
+
+
+def _assistant_search_context(
+    algorithm: str,
+    sample_size: int,
+    random_state: int,
+    k_values: list[int],
+    linkages: list[str],
+    variance_target: float | None,
+    weight_manager: WeightManager,
+) -> dict:
+    """Identifica las condiciones que hacen reproducible una recomendación."""
+    weights = weight_manager.get_weights()
+    return {
+        "algorithm": algorithm,
+        "sample_size": int(sample_size),
+        "random_state": int(random_state),
+        "k_values": list(k_values),
+        "linkages": list(linkages),
+        "variance_target": variance_target,
+        "weights": sorted((str(name), float(value)) for name, value in weights.items()),
+    }
+
+
+def _add_canonical_metric_deltas(rows: list[dict], canonical: dict) -> None:
+    """Añade a cada candidato su diferencia frente a la configuración documentada."""
+    reference = next(
+        (
+            row for row in rows
+            if row.get("n_clusters") == canonical.get("n_clusters")
+            and row.get("linkage") == canonical.get("linkage")
+        ),
+        None,
+    )
+    for row in rows:
+        row["Referencia canónica"] = "Sí" if row is reference else "No"
+        for metric, label in (
+            ("silhouette", "Δ Silhouette vs canónica"),
+            ("davies_bouldin", "Δ Davies-Bouldin vs canónica"),
+            ("calinski_harabasz", "Δ Calinski-Harabasz vs canónica"),
+        ):
+            try:
+                candidate_value = float(row[metric])
+                reference_value = float(reference[metric]) if reference else float("nan")
+                row[label] = (
+                    candidate_value - reference_value
+                    if isfinite(candidate_value) and isfinite(reference_value)
+                    else None
+                )
+            except (KeyError, TypeError, ValueError):
+                row[label] = None
 
 
 st.markdown("### Algoritmo a configurar")
@@ -385,6 +440,8 @@ if st.session_state.get("show_param_search", False):
         st.markdown("##### Alcance de búsqueda")
         search_cols = st.columns([1, 1, 1])
         with search_cols[0]:
+            # La exploración parte del universo completo para reproducir la
+            # configuración documentada; el usuario puede reducirla si lo necesita.
             sample_default = len(df_processed) if dataset_ready else 1706
             sample_max = max(100, len(df_processed)) if dataset_ready else 1000
             sample_size = st.number_input(
@@ -437,8 +494,16 @@ if st.session_state.get("show_param_search", False):
                 options=["complete", "average", "single"],
                 default=["complete", "average"],
             )
+            search_linkages = sorted(
+                set(linkages_to_search + [canonical_params["linkage"]])
+            )
+            st.caption(
+                "La referencia canónica se incluye siempre para poder comparar cada "
+                "candidato con la configuración documentada."
+            )
         else:
             linkages_to_search = []
+            search_linkages = []
 
         run_search = st.button(
             "Calcular recomendación",
@@ -448,35 +513,75 @@ if st.session_state.get("show_param_search", False):
         )
 
         if run_search and dataset_ready:
+            assistant_status = st.status(
+                f"Preparando la exploración de {algorithm}...",
+                expanded=True,
+                state="running",
+            )
+            assistant_progress = st.progress(
+                0,
+                text="Preparando muestra y combinaciones de parámetros...",
+            )
+
+            def update_assistant_progress(completed: int, total: int, message: str) -> None:
+                ratio = completed / total if total else 0
+                assistant_progress.progress(ratio, text=message)
+                assistant_status.update(
+                    label=f"Calculando recomendación · {completed} de {total} combinaciones",
+                    state="running",
+                )
+
             try:
-                with st.spinner("Calculando recomendación de parámetros..."):
-                    wm = WeightManager()
-                    if algorithm == "WKMedoids":
-                        search_result = optimize_wkmedoids_params(
-                            df_processed,
-                            weight_manager=wm,
-                            k_values=k_values,
-                            sample_size=int(sample_size),
-                            random_state=int(random_state),
-                        )
-                    elif algorithm == "W-Hierarchical Clustering":
-                        search_result = optimize_whierarchical_params(
-                            df_processed,
-                            weight_manager=wm,
-                            k_values=k_values,
-                            linkages=linkages_to_search or ["complete"],
-                            sample_size=int(sample_size),
-                            random_state=int(random_state),
-                        )
-                    else:
-                        search_result = optimize_wdbscan_params(
-                            df_processed,
-                            weight_manager=wm,
-                            sample_size=int(sample_size),
-                            random_state=int(random_state),
-                            variance_target=float(variance_target),
-                        )
+                wm = WeightManager()
+                search_context = _assistant_search_context(
+                    algorithm,
+                    int(sample_size),
+                    int(random_state),
+                    k_values,
+                    search_linkages,
+                    variance_target,
+                    wm,
+                )
+                if algorithm == "WKMedoids":
+                    search_result = optimize_wkmedoids_params(
+                        df_processed,
+                        weight_manager=wm,
+                        k_values=k_values,
+                        sample_size=int(sample_size),
+                        random_state=int(random_state),
+                        on_progress=update_assistant_progress,
+                    )
+                elif algorithm == "W-Hierarchical Clustering":
+                    search_result = optimize_whierarchical_params(
+                        df_processed,
+                        weight_manager=wm,
+                        k_values=k_values,
+                        linkages=search_linkages,
+                        sample_size=int(sample_size),
+                        random_state=int(random_state),
+                        on_progress=update_assistant_progress,
+                    )
+                    _add_canonical_metric_deltas(search_result.rows, canonical_params)
+                else:
+                    search_result = optimize_wdbscan_params(
+                        df_processed,
+                        weight_manager=wm,
+                        sample_size=int(sample_size),
+                        random_state=int(random_state),
+                        variance_target=float(variance_target),
+                        on_progress=update_assistant_progress,
+                    )
+                assistant_progress.progress(
+                    1.0,
+                    text="Exploración terminada; preparando el resultado...",
+                )
+                assistant_status.update(
+                    label="Exploración de parámetros completada",
+                    state="complete",
+                    expanded=False,
+                )
                 _display_search_result(search_result)
+                st.session_state["last_param_search"]["search_context"] = search_context
                 has_valid_metrics = any(
                     row.get("silhouette") is not None and isfinite(float(row["silhouette"]))
                     for row in search_result.rows
@@ -495,6 +600,11 @@ if st.session_state.get("show_param_search", False):
                         "Ajusta la muestra o los rangos y vuelve a calcular.",
                     )
             except Exception as exc:
+                assistant_status.update(
+                    label="No se pudo completar la exploración",
+                    state="error",
+                    expanded=True,
+                )
                 st.session_state.pop("last_param_search", None)
                 st.session_state.pop("last_param_search_algorithm", None)
                 queue_feedback(
@@ -507,11 +617,29 @@ if st.session_state.get("show_param_search", False):
 
         last_result = st.session_state.get("last_param_search")
         if last_result and st.session_state.get("last_param_search_algorithm") == algorithm:
-            valid_recommendation = last_result.get("valid_recommendation", True)
+            current_context = _assistant_search_context(
+                algorithm,
+                int(sample_size),
+                int(random_state),
+                k_values,
+                search_linkages,
+                variance_target,
+                WeightManager(),
+            )
+            recommendation_is_current = (
+                algorithm != "W-Hierarchical Clustering"
+                or last_result.get("search_context") == current_context
+            )
+            valid_recommendation = (
+                last_result.get("valid_recommendation", True)
+                and recommendation_is_current
+            )
             st.markdown("##### Última recomendación" if valid_recommendation else "##### Última búsqueda sin recomendación válida")
             col_best, col_criterion, col_sample = st.columns([1.2, 1.4, 1])
             if not valid_recommendation:
-                col_best.caption("Valores de respaldo del cálculo; no constituyen una recomendación.")
+                col_best.caption(
+                    "Los valores mostrados no se pueden aplicar hasta recalcular la exploración."
+                )
             col_best.json(last_result["best_params"])
             with col_criterion:
                 st.markdown("**Criterio**")
@@ -522,7 +650,13 @@ if st.session_state.get("show_param_search", False):
                 last_result["best_params"],
                 canonical_params,
             )
-            if not valid_recommendation:
+            if not recommendation_is_current:
+                st.warning(
+                    "La recomendación ya no corresponde a la muestra, rango, semilla o "
+                    "pesos actuales. Vuelve a calcular antes de aplicarla.",
+                    icon=":material/refresh:",
+                )
+            elif not valid_recommendation:
                 st.error("No hubo métricas válidas para recomendar parámetros. Ajusta la muestra o los rangos y vuelve a calcular.")
             elif (comparison["Estado"] == "Coincide").all():
                 st.success(
@@ -538,6 +672,27 @@ if st.session_state.get("show_param_search", False):
                 )
             if valid_recommendation:
                 st.dataframe(comparison, width="stretch", hide_index=True)
+
+            search_context = last_result.get("search_context", {})
+            if algorithm == "W-Hierarchical Clustering" and search_context:
+                with st.expander("Condiciones de esta exploración", expanded=True):
+                    st.caption(
+                        "Las métricas de la tabla usan la misma distancia ponderada que "
+                        "usa el algoritmo. La recomendación es orientativa porque se "
+                        "calculó sobre una muestra."
+                    )
+                    conditions = pd.DataFrame([{
+                        "Muestra": search_context["sample_size"],
+                        "Semilla": search_context["random_state"],
+                        "k evaluados": ", ".join(map(str, search_context["k_values"])),
+                        "Linkages": ", ".join(search_context["linkages"]),
+                    }])
+                    st.dataframe(conditions, width="stretch", hide_index=True)
+                    st.dataframe(
+                        pd.DataFrame(search_context["weights"], columns=["Variable", "Peso"]),
+                        width="stretch",
+                        hide_index=True,
+                    )
 
             if st.button(
                 "Aplicar esta recomendación",

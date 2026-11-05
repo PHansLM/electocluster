@@ -483,11 +483,38 @@ if run_clicked:
         set(selected_algorithms) == set(algorithm_options)
         and all(sources[algorithm_name] == SOURCE_CANONICAL for algorithm_name in algorithm_options)
     )
+    execution_status = st.status(
+        "Preparando la ejecución seleccionada...",
+        expanded=True,
+        state="running",
+    )
+    progress = st.progress(
+        0,
+        text=f"0 de {len(selected_algorithms)} algoritmos completados.",
+    )
+
+    def register_canonical_result(result) -> None:
+        completed_results.append(result)
+        completed = len(completed_results)
+        progress.progress(
+            completed / len(selected_algorithms),
+            text=f"{completed} de {len(selected_algorithms)} algoritmos completados.",
+        )
+        execution_status.update(
+            label=f"Completado {result.algorithm} · continúa la batería canónica",
+            state="running",
+        )
 
     try:
         if is_complete_canonical_suite:
-            with st.spinner("Ejecutando y consolidando la batería canónica..."):
-                suite = run_canonical_suite(persist=True, on_result=completed_results.append)
+            execution_status.update(
+                label="Ejecutando y consolidando la batería canónica...",
+                state="running",
+            )
+            suite = run_canonical_suite(
+                persist=True,
+                on_result=register_canonical_result,
+            )
             completed_results = list(suite.results)
             st.session_state["last_canonical_suite_id"] = suite.suite_id
             for suite_run in suite.artifact["runs"]:
@@ -511,7 +538,6 @@ if run_clicked:
                     "Revisa la evidencia integrada antes de utilizarla en el capítulo final."
                 )
         else:
-            progress = st.progress(0)
             for i, selected_algorithm in enumerate(selected_algorithms, start=1):
                 failed_algorithm = selected_algorithm
                 selected_source = sources[selected_algorithm]
@@ -520,37 +546,54 @@ if run_clicked:
                     if selected_source == SOURCE_ACTIVE
                     else canonical_configs[selected_algorithm]
                 )
-                with st.spinner(f"Ejecutando {selected_algorithm}..."):
-                    result = run_clustering_experiment(
-                        algorithm=selected_algorithm,
-                        params=selected_params,
-                        weight_manager=WeightManager(),
-                        persist=True,
-                    )
+                execution_status.update(
+                    label=f"Ejecutando {selected_algorithm}...",
+                    state="running",
+                )
+                result = run_clustering_experiment(
+                    algorithm=selected_algorithm,
+                    params=selected_params,
+                    weight_manager=WeightManager(),
+                    persist=True,
+                )
                 completed_results.append(result)
-                progress.progress(i / len(selected_algorithms))
+                progress.progress(
+                    i / len(selected_algorithms),
+                    text=f"{i} de {len(selected_algorithms)} algoritmos completados.",
+                )
             summary_message = (
                 f"Ejecución completada: {len(completed_results)} de {len(selected_algorithms)} algoritmos. "
                 "Los resultados se guardaron y están disponibles en Resultados."
             )
     except Exception as exc:
-        summary_kind = "error"
+        summary_kind = "warning" if completed_results else "error"
         error_detail = f"{type(exc).__name__}: {exc}"
         failed_at = (
             f"Falló {failed_algorithm}. " if not is_complete_canonical_suite
             else "No se pudo completar la batería canónica o su consolidación. "
         )
         saved_count = sum(bool(result.run_id) for result in completed_results)
+        outcome_prefix = "Ejecución incompleta. " if completed_results else "La ejecución no produjo resultados. "
         summary_message = (
-            failed_at + f"Algoritmos completados: {len(completed_results)} de {len(selected_algorithms)}. "
+            outcome_prefix + failed_at
+            + f"Algoritmos completados: {len(completed_results)} de {len(selected_algorithms)}. "
             + (
                 f"Se conservaron {saved_count} resultados guardados, disponibles en Resultados."
                 if saved_count else "Revisa el detalle del error antes de volver a ejecutar."
             )
         )
     finally:
-        if progress is not None:
-            progress.empty()
+        status_state = "error" if summary_kind == "error" else "complete"
+        status_label = {
+            "success": "Ejecución completada",
+            "warning": "Ejecución finalizada con observaciones",
+            "error": "No se pudo completar la ejecución",
+        }[summary_kind]
+        execution_status.update(
+            label=status_label,
+            state=status_state,
+            expanded=summary_kind != "success",
+        )
 
     run_ids = [result.run_id for result in completed_results if result.run_id]
     if not rows:
