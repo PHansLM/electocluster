@@ -59,6 +59,63 @@ def _render_pipeline_steps(placeholder, state: dict) -> None:
     placeholder.markdown("\n".join(lines))
 
 
+IMPUTATION_TYPE_LABELS = {
+    "numerico": "Numérica",
+    "categorico_ordinal": "Categórica ordinal",
+    "categorico_nominal": "Categórica nominal",
+    "binario": "Binaria",
+}
+
+
+def _format_imputation_value(variable: str, value) -> str:
+    """Presenta el valor aplicado con la categoría legible cuando existe."""
+    if pd.isna(value):
+        return "No disponible"
+    details = TODAS_VARIABLES.get(variable, {})
+    categories = details.get("categorias", {})
+    category = categories.get(value, categories.get(int(value), None)) if isinstance(
+        value, (int, float)
+    ) else None
+    if category:
+        return f"{category} ({value:g})"
+    return f"{value:g}" if isinstance(value, float) else str(value)
+
+
+def _imputation_report_table(imputations: dict) -> pd.DataFrame:
+    """Convierte el registro técnico de imputación en una tabla para el reporte."""
+    rows = []
+    for variable, info in imputations.items():
+        details = TODAS_VARIABLES.get(variable, {})
+        strategy = info.get("strategy", "")
+        rows.append({
+            "Variable": f"{details.get('nombre', variable)} ({variable})",
+            "Tipo": IMPUTATION_TYPE_LABELS.get(details.get("tipo"), "No registrado"),
+            "Regla aplicada": {"median": "Mediana", "mode": "Moda"}.get(
+                strategy, strategy or "No registrada"
+            ),
+            "Valor utilizado": _format_imputation_value(variable, info.get("value")),
+            "Valores imputados": int(info.get("count", 0)),
+            "% de registros": float(info.get("percentage", 0)),
+        })
+    return pd.DataFrame(rows)
+
+
+def _consistency_report_table(adjustments: list[dict]) -> pd.DataFrame:
+    """Presenta los ajustes deterministas separados de la imputación estadística."""
+    rows = []
+    for adjustment in adjustments:
+        variable = adjustment.get("variable", "")
+        details = TODAS_VARIABLES.get(variable, {})
+        rows.append({
+            "Variable": f"{details.get('nombre', variable)} ({variable})",
+            "Regla de consistencia": adjustment.get("regla", "No registrada"),
+            "Valor aplicado": _format_imputation_value(variable, adjustment.get("value")),
+            "Registros ajustados": int(adjustment.get("count", 0)),
+            "% de registros": float(adjustment.get("percentage", 0)),
+        })
+    return pd.DataFrame(rows)
+
+
 def _safe_filename(filename: str) -> str:
     name = Path(filename).name
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
@@ -620,6 +677,44 @@ else:
             vars_imputadas = cleaning.get('variables_imputadas', [])
             st.markdown(f"**Variables imputadas:** {len(vars_imputadas)}")
             st.caption(", ".join(vars_imputadas) if vars_imputadas else "Ninguna")
+
+            imputations = cleaning.get('imputaciones_por_variable', {})
+            if imputations:
+                st.markdown("**Detalle de imputación por variable**")
+                st.caption(
+                    "Estas son imputaciones estadísticas para valores faltantes antes de "
+                    "continuar con el pipeline."
+                )
+                st.dataframe(
+                    _imputation_report_table(imputations),
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "Valores imputados": st.column_config.NumberColumn(format="%d"),
+                        "% de registros": st.column_config.NumberColumn(format="%.2f%%"),
+                    },
+                )
+            else:
+                st.caption("No se requirieron imputaciones estadísticas.")
+
+            adjustments = cleaning.get('tratamientos_consistencia', [])
+            if adjustments:
+                st.markdown("**Ajustes de consistencia entre variables**")
+                st.caption(
+                    "Son reglas deterministas entre variables relacionadas; no son "
+                    "imputaciones estadísticas."
+                )
+                st.dataframe(
+                    _consistency_report_table(adjustments),
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "Registros ajustados": st.column_config.NumberColumn(format="%d"),
+                        "% de registros": st.column_config.NumberColumn(format="%.2f%%"),
+                    },
+                )
+            else:
+                st.caption("No se aplicaron ajustes especiales de consistencia.")
 
             outliers = cleaning.get('outliers', {})
             if outliers:

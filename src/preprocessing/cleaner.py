@@ -32,7 +32,8 @@ class DataCleaner:
             'registros_finales': len(df),  
             'registros_eliminados': 0,
             'variables_imputadas': [],
-            'imputaciones_por_variable': {}
+            'imputaciones_por_variable': {},
+            'tratamientos_consistencia': [],
         }
     
     def validate_ranges(self) -> pd.DataFrame:
@@ -82,13 +83,42 @@ class DataCleaner:
 
         # REGLAS PARA VARIABLES DEPENDIENTES
         if 'boletidnew' in self.df.columns and 'boletidnewb' in self.df.columns:
-            
             # 2 = No indígena → categoría 0
-            self.df.loc[self.df['boletidnew'] == 2, 'boletidnewb'] = 0
+            mask_no_indigena = (
+                (self.df['boletidnew'] == 2)
+                & (self.df['boletidnewb'] != 0)
+            )
+            n_no_indigena = int(mask_no_indigena.sum())
+            if n_no_indigena:
+                self.df.loc[mask_no_indigena, 'boletidnewb'] = 0
+                self.metadata['tratamientos_consistencia'].append({
+                    'variable': 'boletidnewb',
+                    'regla': (
+                        'Sin pertenencia indígena: se asigna Ninguno (no indígena).'
+                    ),
+                    'value': 0,
+                    'count': n_no_indigena,
+                    'percentage': round((n_no_indigena / len(self.df)) * 100, 2),
+                })
 
             # 1 = Sí indígena pero categoría 0 → inconsistente → 8
-            mask_inconsistente = (self.df['boletidnew'] == 1) & (self.df['boletidnewb'] == 0)
-            self.df.loc[mask_inconsistente, 'boletidnewb'] = 8
+            mask_inconsistente = (
+                (self.df['boletidnew'] == 1)
+                & (self.df['boletidnewb'] == 0)
+            )
+            n_inconsistente = int(mask_inconsistente.sum())
+            if n_inconsistente:
+                self.df.loc[mask_inconsistente, 'boletidnewb'] = 8
+                self.metadata['tratamientos_consistencia'].append({
+                    'variable': 'boletidnewb',
+                    'regla': (
+                        'Con pertenencia indígena y sin pueblo declarado: se marca '
+                        'No especifica.'
+                    ),
+                    'value': 8,
+                    'count': n_inconsistente,
+                    'percentage': round((n_inconsistente / len(self.df)) * 100, 2),
+                })
 
         for var_code, var_info in TODAS_VARIABLES.items():
             if var_code not in self.df.columns:
