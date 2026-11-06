@@ -853,15 +853,13 @@ cluster_summaries = cluster_difference_summaries(semantic_differences)
 
 (
     tab_summary,
-    tab_differences,
-    tab_distances,
+    tab_comparison,
     tab_dimensions,
     tab_compare,
 ) = st.tabs(
     [
         "Resumen y perfiles",
-        "Diferencias",
-        "Distancias",
+        "Comparación de perfiles",
         "Dimensiones",
         "Comparación métrica",
     ],
@@ -874,8 +872,14 @@ with tab_summary:
         ["Resumen de grupos", "Detalle por grupo", "Proyección PCA"]
     )
 
-with tab_differences:
-    tab_heatmap, tab_deviation = st.tabs(["Vista relativa", "Magnitudes reales"])
+with tab_comparison:
+    tab_heatmap, tab_deviation, tab_distances = st.tabs(
+        [
+            "Frente al total · Vista relativa",
+            "Frente al total · Magnitudes reales",
+            "Entre grupos",
+        ]
+    )
 
 with tab_dist:
     distribution["semantic_summary"] = distribution["cluster_id"].map(
@@ -1144,12 +1148,6 @@ with tab_heatmap:
                 )
 
 with tab_profile_analysis:
-    st.markdown("#### Estadisticas segun el tipo de variable")
-    st.caption(
-        "Vista aditiva calculada sobre los mismos datos procesados y etiquetas del run. "
-        "No recalcula el clustering ni reemplaza los perfiles promedio historicos."
-    )
-
     summaries = semantic_profiles.summaries
     semantic_distributions = semantic_profiles.distributions
     if summaries.empty:
@@ -1161,19 +1159,65 @@ with tab_profile_analysis:
             for feature_type in SEMANTIC_TYPE_ORDER
             if feature_type in set(summaries["feature_type"])
         ]
-        semantic_col_cluster, semantic_col_type = st.columns(2)
-        with semantic_col_cluster:
-            selected_semantic_cluster = st.selectbox(
-                "Cluster del perfil semantico",
-                options=semantic_clusters,
-                format_func=lambda cluster_id: f"Cluster {cluster_id}",
+        st.markdown("#### Grupo")
+        selected_semantic_cluster = st.selectbox(
+            "Grupo",
+            options=semantic_clusters,
+            format_func=lambda cluster_id: f"Cluster {cluster_id}",
+            label_visibility="collapsed",
+        )
+
+        st.markdown("#### Descripción del perfil del grupo")
+        detail_profile = profiles[
+            profiles["cluster"] == selected_semantic_cluster
+        ].copy()
+        detail_feature_options = [
+            column for column in profiles.columns
+            if column not in PROFILE_METADATA_COLUMNS
+        ]
+        with st.popover(
+            "Configurar tabla",
+            icon=":material/tune:",
+            help="Selecciona las variables visibles en el perfil de este grupo.",
+        ):
+            st.caption(
+                "Por defecto se muestran todas las variables. La selección solo cambia "
+                "la vista de este perfil."
             )
-        with semantic_col_type:
-            selected_semantic_type = st.selectbox(
-                "Tipo de variable del perfil semantico",
-                options=available_types,
-                format_func=lambda feature_type: SEMANTIC_TYPE_LABELS[feature_type],
+            selected_detail_features = st.multiselect(
+                "Características visibles",
+                options=detail_feature_options,
+                default=detail_feature_options,
+                format_func=feature_display_name,
+                key=f"detail_profile_features_{selected_run_id}",
             )
+
+        if not selected_detail_features:
+            st.warning("Selecciona al menos una característica en Configurar tabla.")
+        else:
+            detail_profile = detail_profile[
+                [
+                    column for column in profiles.columns
+                    if column in PROFILE_METADATA_COLUMNS
+                    or column in selected_detail_features
+                ]
+            ]
+            _render_profiles_table(detail_profile)
+            st.caption(
+                f"Mostrando {len(selected_detail_features)} de "
+                f"{len(detail_feature_options)} características del grupo seleccionado."
+            )
+
+        st.markdown("#### Estadísticas según el tipo de variable")
+        st.caption(
+            "Vista aditiva calculada sobre los mismos datos procesados y etiquetas del run. "
+            "No recalcula el clustering ni reemplaza los perfiles promedio históricos."
+        )
+        selected_semantic_type = st.selectbox(
+            "Tipo de variable del perfil semántico",
+            options=available_types,
+            format_func=lambda feature_type: SEMANTIC_TYPE_LABELS[feature_type],
+        )
 
         selected_summaries = summaries[
             (summaries["cluster_id"] == selected_semantic_cluster)
@@ -1604,8 +1648,8 @@ with tab_distances:
         st.write(
             "**¿Qué puedo concluir?** Una distancia menor indica mayor semejanza entre "
             "los promedios en esta ejecución. No significa que todas las personas de ambos "
-            "grupos sean iguales, ni que los grupos deban unirse. Consulta Diferencias "
-            "y las vistas de Diferencias para entender qué características los separan."
+            "grupos sean iguales, ni que los grupos deban unirse. Consulta la vista "
+            "Frente al total para entender qué características los separan."
         )
         with st.expander("Ver todas las parejas y cómo se calcula la distancia"):
             st.write(

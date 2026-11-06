@@ -19,9 +19,17 @@ class ResultsReportingTest(unittest.TestCase):
         self.assertIn("Descargar comparación métrica CSV", source)
         self.assertIn('file_name=f"{report[\'report_name\']}.csv"', source)
         self.assertIn("Comparación métrica", source)
+        self.assertIn("Comparación de perfiles", source)
+        self.assertIn("Frente al total · Vista relativa", source)
+        self.assertIn("Frente al total · Magnitudes reales", source)
+        self.assertIn("Entre grupos", source)
         self.assertIn("Descargar registro técnico JSON", source)
         self.assertIn("Descargar perfiles semánticos JSON", source)
         self.assertIn("Detalle por grupo", source)
+        self.assertIn("Descripción del perfil del grupo", source)
+        self.assertIn("detail_profile_features_", source)
+        self.assertIn("default=detail_feature_options", source)
+        self.assertIn("Estadísticas según el tipo de variable", source)
         self.assertIn("Descargar proyección PCA 2D (PNG)", source)
 
     def test_figure_export_is_a_browser_download(self):

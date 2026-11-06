@@ -1132,14 +1132,14 @@ def run_streamlit_checks() -> None:
                 "Resumen de grupos",
                 "Detalle por grupo",
                 "Proyección PCA",
-                "Diferencias",
-                "Vista relativa",
-                "Magnitudes reales",
-                "Distancias",
+                "Comparación de perfiles",
+                "Frente al total · Vista relativa",
+                "Frente al total · Magnitudes reales",
+                "Entre grupos",
                 "Dimensiones",
                 "Radar",
                 "Mapa de diferencias",
-                "Comparación",
+                "Comparación métrica",
             }
             assert expected_tabs <= set(tab_labels), (
                 f"Consolidated results navigation is incomplete: {tab_labels}"
