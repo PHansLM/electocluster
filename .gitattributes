@@ -1,0 +1,2 @@
+# Keep sensitivity CSV bytes stable across Windows checkouts and publication.
+results/pruebas_sensibilidad_ponderacion/*.csv text eol=lf

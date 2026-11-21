@@ -1,6 +1,6 @@
 {
   "schema": "electocluster-sensibilidad-ponderacion-v1",
-  "fecha_hora": "2026-11-20T17:06:27.234225-04:00",
+  "fecha_hora": "2026-11-20T20:55:58.463463-04:00",
   "notebook": "D:\\GradoProyec\\electocluster\\notebooks\\pruebas_sensibilidad_ponderacion\\01_sensibilidad_ponderaciones_parametros_fijos.ipynb",
   "dataset": {
     "ruta": "D:\\GradoProyec\\electocluster\\data\\processed\\lapop_bolivia_2023_processed.csv",
@@ -75,10 +75,10 @@
     }
   },
   "git": {
-    "commit": "39215f00a53346094b8989d98e119982fac0239b",
+    "commit": "09b691dceadb3f3dddf3cd39ea4e63144b260f41",
     "rama": "experiments",
     "status_limpio": false,
-    "git_status_at_execution": "## experiments\n M notebooks/iteration4/04_clustering_ponderado_electoral.ipynb\n M results/README.md\n M src/weighting/schemas/feature_weights.json\n?? Plan_correcciones_prototipo_Patricia.md\n?? notebooks/pruebas_adicionales/\n?? notebooks/pruebas_sensibilidad_ponderacion/"
+    "git_status_at_execution": "## experiments...origin/experiments\n M notebooks/iteration4/04_clustering_ponderado_electoral.ipynb\n M notebooks/pruebas_sensibilidad_ponderacion/01_sensibilidad_ponderaciones_parametros_fijos.ipynb\n M src/weighting/schemas/feature_weights.json\n?? .gitattributes\n?? Plan_correcciones_prototipo_Patricia.md\n?? notebooks/pruebas_adicionales/"
   },
   "entorno": {
     "python": "3.11.9",
@@ -433,63 +433,63 @@
   "archivos_generados": [
     {
       "ruta": "definicion_pesos_escenarios.csv",
-      "sha256": "9cd255e68f3292906605e358abd49a6aecb72aa60026d35947c647fb617787a5",
-      "bytes": 9563
+      "sha256": "111c1f26a3dfa0ce6f9810dc974de1dd52378fc1f2deac7c7895e78e4243a195",
+      "bytes": 9338
     },
     {
       "ruta": "resumen_escenarios.csv",
-      "sha256": "dd7f168889109bd9604daa12ff9c872d8130aed0a1a04fdb2af5f2d273e887c4",
-      "bytes": 5371
+      "sha256": "69822241909ae764c910303adc2c0a6547169462417877891407a2e15a2b7c43",
+      "bytes": 5350
     },
     {
       "ruta": "comparacion_asignaciones.csv",
-      "sha256": "acaffcb0b727c0d0947623d5b0e0acad52729eb3ff85282034c2b2bfb5b07d9c",
-      "bytes": 4958
+      "sha256": "c6255f4f1e2451406e4d484e5d11c3bce5e9fe75fb6fe40d72524bba0ea1f06d",
+      "bytes": 4933
     },
     {
       "ruta": "comparacion_metricas.csv",
-      "sha256": "4b23c4426920ec2b172e03dde368449ae7eb7d1aadffdfe793920b97b247f8bc",
-      "bytes": 5516
+      "sha256": "3bf04b1ed212f96badacd9cac476886d4bbbe8dfa77e54045899237d42e993cf",
+      "bytes": 5467
     },
     {
       "ruta": "comparacion_tamanos_ruido.csv",
-      "sha256": "74e50fbd8fd1daade314dc484b3e5c6cccfb7c8d26813706e06f8249e623303b",
-      "bytes": 2253
+      "sha256": "070152f7522d6fc33a62e37a47cd51fa0a51e06fed0f2d8010a77f1b814b8f88",
+      "bytes": 2228
     },
     {
       "ruta": "etiquetas.csv",
-      "sha256": "76fc26e795af4593163f839e1db6e24204c01e66c7f50a79d389432930ad8eeb",
-      "bytes": 1888089
+      "sha256": "8f3cf79c751e8994dcfa93589c1ad8f968f6997bb7b2dd8f9a55539727a6c112",
+      "bytes": 1847144
     },
     {
       "ruta": "distribucion_tamanos.csv",
-      "sha256": "9104cd833672720114f6d7c8b39f79ebe545621aba540463836fbb1c34d55287",
-      "bytes": 10159
+      "sha256": "377fc84ac1749560e4aaca8935657a9e581bfa62d6a0cbf9080105a5bb74bc78",
+      "bytes": 10000
     },
     {
       "ruta": "cobertura_ruido.csv",
-      "sha256": "309aa31bdec8ec071625bc71e8ede5ea0de900cb5b66f530c310470f0112c9d8",
-      "bytes": 904
+      "sha256": "9a0d539f08a856837077066b1b7b6a340e1219c6193bc346cdd33082fded9c34",
+      "bytes": 895
     },
     {
       "ruta": "correspondencia_etiquetas.csv",
-      "sha256": "bcd3299cfbefb5a5e0735bb2167c9a6eefd7a61d01f1ca84219bbe8ebd8ca229",
-      "bytes": 6689
+      "sha256": "96c1f8212da74001363ed18d8440c9e1a14964ec4868836f078bc244e4583ad3",
+      "bytes": 6530
     },
     {
       "ruta": "comparacion_perfiles.csv",
-      "sha256": "4dce80c48fd63e8157413a0fd926033cf1faea9e7f2906405947d55fff979eba",
-      "bytes": 532311
+      "sha256": "a3f9f9635af9e3cb9d1c7c459ff56899b97c4ef4973873afc1986ba7ea3b0893",
+      "bytes": 527886
     },
     {
       "ruta": "variables_mas_sensibles_por_escenario.csv",
-      "sha256": "6d7a5af6e33bfa4c4941effa94dd466038f13aa2577ff3464eac43c21ce562e5",
-      "bytes": 54054
+      "sha256": "97c04d3420bd27c2969e95e3499f83caf2ab6e2e6e0f2eb315c5390d18ab8ce6",
+      "bytes": 53437
     },
     {
       "ruta": "variables_mas_sensibles.csv",
-      "sha256": "fdeddbc5cad622a5328d32f1367088394e5ba441e56a817cd4b5d996331af355",
-      "bytes": 5316
+      "sha256": "dbcd1aa99fd8c66c127ffaaf4115e7c0c6a10c0e1b3abfd23032f498d07bd9c0",
+      "bytes": 5231
     },
     {
       "ruta": "sintesis_metodologica.md",
