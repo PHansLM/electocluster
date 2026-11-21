@@ -1,0 +1,564 @@
+{
+  "schema": "electocluster-sensibilidad-ponderacion-v1",
+  "fecha_hora": "2026-11-20T17:06:27.234225-04:00",
+  "notebook": "D:\\GradoProyec\\electocluster\\notebooks\\pruebas_sensibilidad_ponderacion\\01_sensibilidad_ponderaciones_parametros_fijos.ipynb",
+  "dataset": {
+    "ruta": "D:\\GradoProyec\\electocluster\\data\\processed\\lapop_bolivia_2023_processed.csv",
+    "sha256": "a06b8bb09009b7ac1f1da8817fea11a9b63f0fdde3bab06a1485594faeb8d3dc",
+    "shape": [
+      1706,
+      28
+    ],
+    "columnas": [
+      "edre",
+      "q10inc",
+      "etid",
+      "boletidnew",
+      "boletidnewb",
+      "estratopri",
+      "ur",
+      "ocupoit",
+      "q2",
+      "q1tc_r",
+      "q3cn",
+      "q5b",
+      "leng1",
+      "formal",
+      "wf1",
+      "bolcct1a",
+      "bolcct1b",
+      "bolcct1c",
+      "estratosec",
+      "q12cn",
+      "q12bn",
+      "gi0n",
+      "smedia3n",
+      "q10e",
+      "q11n",
+      "leng4",
+      "wealth_index",
+      "civic_index"
+    ]
+  },
+  "pesos_dominio": {
+    "ruta": "D:\\GradoProyec\\electocluster\\src\\weighting\\schemas\\feature_weights.json",
+    "sha256": "748e45c04aab8e00a2aed2fbc1255da70f1e1a5183015be02f6128ee612d7c7a",
+    "copia_28_variables": {
+      "edre": 1.0,
+      "q10inc": 1.0,
+      "etid": 0.75,
+      "boletidnew": 0.7,
+      "boletidnewb": 0.7,
+      "estratopri": 0.85,
+      "ur": 0.9,
+      "ocupoit": 0.95,
+      "q2": 0.65,
+      "q1tc_r": 0.5,
+      "q3cn": 0.7,
+      "q5b": 0.7,
+      "leng1": 0.65,
+      "formal": 0.65,
+      "wf1": 0.65,
+      "bolcct1a": 0.65,
+      "bolcct1b": 0.65,
+      "bolcct1c": 0.65,
+      "estratosec": 0.6,
+      "q12cn": 0.5,
+      "q12bn": 0.6,
+      "gi0n": 0.55,
+      "smedia3n": 0.55,
+      "q10e": 0.5,
+      "q11n": 0.55,
+      "leng4": 0.5,
+      "wealth_index": 0.8,
+      "civic_index": 0.5
+    }
+  },
+  "git": {
+    "commit": "39215f00a53346094b8989d98e119982fac0239b",
+    "rama": "experiments",
+    "status_limpio": false,
+    "git_status_at_execution": "## experiments\n M notebooks/iteration4/04_clustering_ponderado_electoral.ipynb\n M results/README.md\n M src/weighting/schemas/feature_weights.json\n?? Plan_correcciones_prototipo_Patricia.md\n?? notebooks/pruebas_adicionales/\n?? notebooks/pruebas_sensibilidad_ponderacion/"
+  },
+  "entorno": {
+    "python": "3.11.9",
+    "numpy": "1.26.4",
+    "pandas": "2.1.4",
+    "scikit_learn": "1.3.2",
+    "scikit_learn_extra": "0.3.0",
+    "scipy": "1.11.4",
+    "matplotlib": "3.8.2",
+    "seaborn": "0.13.2",
+    "platform": "Windows-10-10.0.26200-SP0"
+  },
+  "parametros_fijos": {
+    "WKMedoids": {
+      "n_clusters": 13,
+      "method": "pam",
+      "max_iter": 300,
+      "random_state": 42,
+      "metric": "precomputed"
+    },
+    "WHierarchical": {
+      "n_clusters": 2,
+      "linkage": "complete",
+      "metric": "precomputed"
+    },
+    "WDBSCAN": {
+      "eps": 0.606,
+      "min_samples": 34,
+      "pca_components": 17,
+      "pipeline": "X * weights -> PCA17 -> DBSCAN"
+    }
+  },
+  "escenarios": {
+    "dominio": {
+      "pesos": {
+        "edre": 1.0,
+        "q10inc": 1.0,
+        "etid": 0.75,
+        "boletidnew": 0.7,
+        "boletidnewb": 0.7,
+        "estratopri": 0.85,
+        "ur": 0.9,
+        "ocupoit": 0.95,
+        "q2": 0.65,
+        "q1tc_r": 0.5,
+        "q3cn": 0.7,
+        "q5b": 0.7,
+        "leng1": 0.65,
+        "formal": 0.65,
+        "wf1": 0.65,
+        "bolcct1a": 0.65,
+        "bolcct1b": 0.65,
+        "bolcct1c": 0.65,
+        "estratosec": 0.6,
+        "q12cn": 0.5,
+        "q12bn": 0.6,
+        "gi0n": 0.55,
+        "smedia3n": 0.55,
+        "q10e": 0.5,
+        "q11n": 0.55,
+        "leng4": 0.5,
+        "wealth_index": 0.8,
+        "civic_index": 0.5
+      },
+      "variables_bloque": []
+    },
+    "uniforme": {
+      "pesos": {
+        "edre": 1.0,
+        "q10inc": 1.0,
+        "etid": 1.0,
+        "boletidnew": 1.0,
+        "boletidnewb": 1.0,
+        "estratopri": 1.0,
+        "ur": 1.0,
+        "ocupoit": 1.0,
+        "q2": 1.0,
+        "q1tc_r": 1.0,
+        "q3cn": 1.0,
+        "q5b": 1.0,
+        "leng1": 1.0,
+        "formal": 1.0,
+        "wf1": 1.0,
+        "bolcct1a": 1.0,
+        "bolcct1b": 1.0,
+        "bolcct1c": 1.0,
+        "estratosec": 1.0,
+        "q12cn": 1.0,
+        "q12bn": 1.0,
+        "gi0n": 1.0,
+        "smedia3n": 1.0,
+        "q10e": 1.0,
+        "q11n": 1.0,
+        "leng4": 1.0,
+        "wealth_index": 1.0,
+        "civic_index": 1.0
+      },
+      "variables_bloque": []
+    },
+    "suavizado_50": {
+      "pesos": {
+        "edre": 1.0,
+        "q10inc": 1.0,
+        "etid": 0.875,
+        "boletidnew": 0.85,
+        "boletidnewb": 0.85,
+        "estratopri": 0.925,
+        "ur": 0.95,
+        "ocupoit": 0.975,
+        "q2": 0.825,
+        "q1tc_r": 0.75,
+        "q3cn": 0.85,
+        "q5b": 0.85,
+        "leng1": 0.825,
+        "formal": 0.825,
+        "wf1": 0.825,
+        "bolcct1a": 0.825,
+        "bolcct1b": 0.825,
+        "bolcct1c": 0.825,
+        "estratosec": 0.8,
+        "q12cn": 0.75,
+        "q12bn": 0.8,
+        "gi0n": 0.775,
+        "smedia3n": 0.775,
+        "q10e": 0.75,
+        "q11n": 0.775,
+        "leng4": 0.75,
+        "wealth_index": 0.9,
+        "civic_index": 0.75
+      },
+      "variables_bloque": []
+    },
+    "intensificado_025_1": {
+      "pesos": {
+        "edre": 1.0,
+        "q10inc": 1.0,
+        "etid": 0.625,
+        "boletidnew": 0.5499999999999999,
+        "boletidnewb": 0.5499999999999999,
+        "estratopri": 0.7749999999999999,
+        "ur": 0.8500000000000001,
+        "ocupoit": 0.9249999999999999,
+        "q2": 0.47500000000000003,
+        "q1tc_r": 0.25,
+        "q3cn": 0.5499999999999999,
+        "q5b": 0.5499999999999999,
+        "leng1": 0.47500000000000003,
+        "formal": 0.47500000000000003,
+        "wf1": 0.47500000000000003,
+        "bolcct1a": 0.47500000000000003,
+        "bolcct1b": 0.47500000000000003,
+        "bolcct1c": 0.47500000000000003,
+        "estratosec": 0.39999999999999997,
+        "q12cn": 0.25,
+        "q12bn": 0.39999999999999997,
+        "gi0n": 0.32500000000000007,
+        "smedia3n": 0.32500000000000007,
+        "q10e": 0.25,
+        "q11n": 0.32500000000000007,
+        "leng4": 0.25,
+        "wealth_index": 0.7000000000000001,
+        "civic_index": 0.25
+      },
+      "variables_bloque": []
+    },
+    "atenuacion_socioeconomica": {
+      "pesos": {
+        "edre": 0.5,
+        "q10inc": 0.5,
+        "etid": 0.75,
+        "boletidnew": 0.7,
+        "boletidnewb": 0.7,
+        "estratopri": 0.85,
+        "ur": 0.9,
+        "ocupoit": 0.475,
+        "q2": 0.65,
+        "q1tc_r": 0.5,
+        "q3cn": 0.7,
+        "q5b": 0.7,
+        "leng1": 0.65,
+        "formal": 0.325,
+        "wf1": 0.65,
+        "bolcct1a": 0.65,
+        "bolcct1b": 0.65,
+        "bolcct1c": 0.65,
+        "estratosec": 0.6,
+        "q12cn": 0.5,
+        "q12bn": 0.6,
+        "gi0n": 0.55,
+        "smedia3n": 0.55,
+        "q10e": 0.5,
+        "q11n": 0.55,
+        "leng4": 0.5,
+        "wealth_index": 0.4,
+        "civic_index": 0.5
+      },
+      "variables_bloque": [
+        "edre",
+        "q10inc",
+        "ocupoit",
+        "formal",
+        "wealth_index"
+      ]
+    },
+    "atenuacion_territorial": {
+      "pesos": {
+        "edre": 1.0,
+        "q10inc": 1.0,
+        "etid": 0.75,
+        "boletidnew": 0.7,
+        "boletidnewb": 0.7,
+        "estratopri": 0.425,
+        "ur": 0.45,
+        "ocupoit": 0.95,
+        "q2": 0.65,
+        "q1tc_r": 0.5,
+        "q3cn": 0.7,
+        "q5b": 0.7,
+        "leng1": 0.65,
+        "formal": 0.65,
+        "wf1": 0.65,
+        "bolcct1a": 0.65,
+        "bolcct1b": 0.65,
+        "bolcct1c": 0.65,
+        "estratosec": 0.3,
+        "q12cn": 0.5,
+        "q12bn": 0.6,
+        "gi0n": 0.55,
+        "smedia3n": 0.55,
+        "q10e": 0.5,
+        "q11n": 0.55,
+        "leng4": 0.5,
+        "wealth_index": 0.8,
+        "civic_index": 0.5
+      },
+      "variables_bloque": [
+        "estratopri",
+        "estratosec",
+        "ur"
+      ]
+    },
+    "atenuacion_identidad": {
+      "pesos": {
+        "edre": 1.0,
+        "q10inc": 1.0,
+        "etid": 0.375,
+        "boletidnew": 0.35,
+        "boletidnewb": 0.35,
+        "estratopri": 0.85,
+        "ur": 0.9,
+        "ocupoit": 0.95,
+        "q2": 0.65,
+        "q1tc_r": 0.5,
+        "q3cn": 0.7,
+        "q5b": 0.7,
+        "leng1": 0.325,
+        "formal": 0.65,
+        "wf1": 0.65,
+        "bolcct1a": 0.65,
+        "bolcct1b": 0.65,
+        "bolcct1c": 0.65,
+        "estratosec": 0.6,
+        "q12cn": 0.5,
+        "q12bn": 0.6,
+        "gi0n": 0.55,
+        "smedia3n": 0.55,
+        "q10e": 0.5,
+        "q11n": 0.55,
+        "leng4": 0.25,
+        "wealth_index": 0.8,
+        "civic_index": 0.5
+      },
+      "variables_bloque": [
+        "etid",
+        "boletidnew",
+        "boletidnewb",
+        "leng1",
+        "leng4"
+      ]
+    },
+    "atenuacion_participacion_informacion": {
+      "pesos": {
+        "edre": 1.0,
+        "q10inc": 1.0,
+        "etid": 0.75,
+        "boletidnew": 0.7,
+        "boletidnewb": 0.7,
+        "estratopri": 0.85,
+        "ur": 0.9,
+        "ocupoit": 0.95,
+        "q2": 0.65,
+        "q1tc_r": 0.5,
+        "q3cn": 0.7,
+        "q5b": 0.7,
+        "leng1": 0.65,
+        "formal": 0.65,
+        "wf1": 0.65,
+        "bolcct1a": 0.65,
+        "bolcct1b": 0.65,
+        "bolcct1c": 0.65,
+        "estratosec": 0.6,
+        "q12cn": 0.5,
+        "q12bn": 0.6,
+        "gi0n": 0.275,
+        "smedia3n": 0.275,
+        "q10e": 0.5,
+        "q11n": 0.55,
+        "leng4": 0.5,
+        "wealth_index": 0.8,
+        "civic_index": 0.25
+      },
+      "variables_bloque": [
+        "civic_index",
+        "gi0n",
+        "smedia3n"
+      ]
+    }
+  },
+  "verificaciones": {
+    "dataset_hash": "PASS",
+    "shape_1706x28": "PASS",
+    "sin_faltantes_infinitos": "PASS",
+    "orden_variables": "PASS",
+    "escenarios_no_duplicados": "PASS",
+    "bloques_solo_variables_previstas": "PASS",
+    "parametros_constantes": "PASS",
+    "uniforme_equivale_euclidiana": "PASS",
+    "linea_base_canonica": [
+      {
+        "algoritmo": "WKMedoids",
+        "ari_vs_canonico": 1.0,
+        "n_clusters": 13,
+        "n_ruido": 0,
+        "resultado": "PASS"
+      },
+      {
+        "algoritmo": "WHierarchical",
+        "ari_vs_canonico": 1.0,
+        "n_clusters": 2,
+        "n_ruido": 0,
+        "resultado": "PASS"
+      },
+      {
+        "algoritmo": "WDBSCAN",
+        "ari_vs_canonico": 1.0,
+        "n_clusters": 4,
+        "n_ruido": 1410,
+        "resultado": "PASS"
+      }
+    ]
+  },
+  "archivos_generados": [
+    {
+      "ruta": "definicion_pesos_escenarios.csv",
+      "sha256": "9cd255e68f3292906605e358abd49a6aecb72aa60026d35947c647fb617787a5",
+      "bytes": 9563
+    },
+    {
+      "ruta": "resumen_escenarios.csv",
+      "sha256": "dd7f168889109bd9604daa12ff9c872d8130aed0a1a04fdb2af5f2d273e887c4",
+      "bytes": 5371
+    },
+    {
+      "ruta": "comparacion_asignaciones.csv",
+      "sha256": "acaffcb0b727c0d0947623d5b0e0acad52729eb3ff85282034c2b2bfb5b07d9c",
+      "bytes": 4958
+    },
+    {
+      "ruta": "comparacion_metricas.csv",
+      "sha256": "4b23c4426920ec2b172e03dde368449ae7eb7d1aadffdfe793920b97b247f8bc",
+      "bytes": 5516
+    },
+    {
+      "ruta": "comparacion_tamanos_ruido.csv",
+      "sha256": "74e50fbd8fd1daade314dc484b3e5c6cccfb7c8d26813706e06f8249e623303b",
+      "bytes": 2253
+    },
+    {
+      "ruta": "etiquetas.csv",
+      "sha256": "76fc26e795af4593163f839e1db6e24204c01e66c7f50a79d389432930ad8eeb",
+      "bytes": 1888089
+    },
+    {
+      "ruta": "distribucion_tamanos.csv",
+      "sha256": "9104cd833672720114f6d7c8b39f79ebe545621aba540463836fbb1c34d55287",
+      "bytes": 10159
+    },
+    {
+      "ruta": "cobertura_ruido.csv",
+      "sha256": "309aa31bdec8ec071625bc71e8ede5ea0de900cb5b66f530c310470f0112c9d8",
+      "bytes": 904
+    },
+    {
+      "ruta": "correspondencia_etiquetas.csv",
+      "sha256": "bcd3299cfbefb5a5e0735bb2167c9a6eefd7a61d01f1ca84219bbe8ebd8ca229",
+      "bytes": 6689
+    },
+    {
+      "ruta": "comparacion_perfiles.csv",
+      "sha256": "4dce80c48fd63e8157413a0fd926033cf1faea9e7f2906405947d55fff979eba",
+      "bytes": 532311
+    },
+    {
+      "ruta": "variables_mas_sensibles_por_escenario.csv",
+      "sha256": "6d7a5af6e33bfa4c4941effa94dd466038f13aa2577ff3464eac43c21ce562e5",
+      "bytes": 54054
+    },
+    {
+      "ruta": "variables_mas_sensibles.csv",
+      "sha256": "fdeddbc5cad622a5328d32f1367088394e5ba441e56a817cd4b5d996331af355",
+      "bytes": 5316
+    },
+    {
+      "ruta": "sintesis_metodologica.md",
+      "sha256": "95c1321e4850776599d7f85be7372c42244d1ae052a947a4901c351890d8531f",
+      "bytes": 1254
+    },
+    {
+      "ruta": "figuras/ari_vs_dominio.png",
+      "sha256": "633b36e00de8535c214f3b30fb74182e0fe9132d1794430d92558eb53c466d98",
+      "bytes": 115574
+    },
+    {
+      "ruta": "figuras/distribucion_tamanos_alineados.png",
+      "sha256": "fed1d20bf79b4779af827354f5e813dd56e51214274fb332ac5134ba540a0e81",
+      "bytes": 216458
+    },
+    {
+      "ruta": "figuras/wdbscan_cobertura_ruido.png",
+      "sha256": "3f36a79b366cc4e77b1d5fcd61cab105275015dd1ce3019850169387aa2a618e",
+      "bytes": 108472
+    },
+    {
+      "ruta": "figuras/metricas_geometrias.png",
+      "sha256": "38d2a30cf57083a2bc2d81ae322e8ead21af0e1032192b9530d82d7202eb71ab",
+      "bytes": 271266
+    },
+    {
+      "ruta": "figuras/sensibilidad_perfiles_alineados.png",
+      "sha256": "e8808cb7135f8c0264d9639c22d48866677c12983d8fe2393a6375a042a106d6",
+      "bytes": 255022
+    },
+    {
+      "ruta": "manifiesto.json",
+      "sha256": null,
+      "bytes": null,
+      "nota": "autorreferencia"
+    }
+  ],
+  "paquete_publicacion": {
+    "archivos_incluidos": [
+      "definicion_pesos_escenarios.csv",
+      "resumen_escenarios.csv",
+      "comparacion_asignaciones.csv",
+      "comparacion_metricas.csv",
+      "comparacion_tamanos_ruido.csv",
+      "distribucion_tamanos.csv",
+      "cobertura_ruido.csv",
+      "correspondencia_etiquetas.csv",
+      "comparacion_perfiles.csv",
+      "variables_mas_sensibles_por_escenario.csv",
+      "variables_mas_sensibles.csv",
+      "figuras/ari_vs_dominio.png",
+      "figuras/distribucion_tamanos_alineados.png",
+      "figuras/wdbscan_cobertura_ruido.png",
+      "figuras/metricas_geometrias.png",
+      "figuras/sensibilidad_perfiles_alineados.png",
+      "manifiesto.json"
+    ],
+    "archivos_solo_locales": [
+      "etiquetas.csv",
+      "sintesis_metodologica.md"
+    ],
+    "nota": "archivos_generados registra todas las salidas de la ejecución local. Los hashes de archivos_solo_locales documentan su procedencia, pero esos archivos no se distribuyen en el repositorio. El dataset de entrada tampoco se incluye."
+  },
+  "advertencias": [
+    "El repositorio estaba modificado durante la ejecución; consulte git_status_at_execution.",
+    "El control uniforme es técnico y no sustituye la referencia de dominio.",
+    "W-DBSCAN reajusta PCA17 por escenario; la población evaluada cambia con la cobertura.",
+    "Las variables nominales permanecen codificadas numéricamente según el pipeline canónico."
+  ],
+  "ejecuciones_incompletas": []
+}
