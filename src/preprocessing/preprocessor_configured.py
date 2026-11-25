@@ -12,6 +12,8 @@ from .cleaner import clean_dataset_configured
 from .transformer import transform_dataset
 from .feature_engineering import engineer_features
 from .reporter import PreprocessingReporter
+from .profile_metadata import build_profile_metadata
+from src.evaluation.provenance import sha256_file
 from src.utils.constants import PROCESSED_DATA_PATH
 
 
@@ -102,6 +104,7 @@ def run_pipeline_configured(
         encode=config.encode,
         normalization_method=config.normalization_method,
     )
+    transform_report['feature_metadata'] = build_profile_metadata(df_engineered, df_transformed)
     reporter.add_section('transformation', transform_report)
     notify(4, "Transformaciones completadas; guardando resultados...")
 
@@ -111,6 +114,7 @@ def run_pipeline_configured(
     df_transformed.to_csv(output_path, index=False)
 
     report = reporter.generate_full_report()
+    report['processed_dataset_sha256'] = sha256_file(output_path)
     if report_metadata:
         report.update(reporter._convert_to_serializable(report_metadata))
 

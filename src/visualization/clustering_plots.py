@@ -105,7 +105,7 @@ def _pca_axis_profiles(
             descriptions = []
             for feature in driver_features:
                 value = float(df.loc[mask, feature].mean())
-                reading = interpret_feature_value(feature, value).text
+                reading = interpret_feature_value(feature, value, df.attrs.get("feature_metadata")).text
                 descriptions.append(f"{feature_display_name(feature)}: {reading}")
             return " · ".join(descriptions) or "Sin variables interpretables destacadas"
 
@@ -114,7 +114,7 @@ def _pca_axis_profiles(
             for feature in driver_features:
                 value = float(df.loc[mask, feature].mean())
                 reading = _short_profile_reading(
-                    interpret_feature_value(feature, value).text
+                    interpret_feature_value(feature, value, df.attrs.get("feature_metadata")).text
                 )
                 name = TODAS_VARIABLES.get(feature, {}).get("nombre", feature)
                 descriptions.append(f"{name}: {reading}")
@@ -124,7 +124,7 @@ def _pca_axis_profiles(
             readings = []
             for feature in driver_features:
                 reading = _short_profile_reading(
-                    interpret_feature_value(feature, float(df.loc[mask, feature].mean())).text
+                    interpret_feature_value(feature, float(df.loc[mask, feature].mean()), df.attrs.get("feature_metadata")).text
                 )
                 if feature == "q2":
                     number = re.search(r"\d+(?:[.,]\d+)?", reading)

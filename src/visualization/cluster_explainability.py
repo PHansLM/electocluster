@@ -82,10 +82,12 @@ def top_distinctive_features(
             cluster_interpretation = interpret_feature_value(
                 row["feature"],
                 row["cluster_value"],
+                df.attrs.get("feature_metadata"),
             )
             global_interpretation = interpret_feature_value(
                 row["feature"],
                 row["global_value"],
+                df.attrs.get("feature_metadata"),
             )
             rows.append({
                 "cluster": str(int(cluster_id)),

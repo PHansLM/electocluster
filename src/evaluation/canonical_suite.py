@@ -227,7 +227,10 @@ def _suite_run_record(
             "metadata": metadata,
         }
     )
-    profiles = cluster_semantic_profiles(result.data, labels)
+    profiles = cluster_semantic_profiles(
+        result.data, labels,
+        feature_metadata=metadata.get("profile_reading", {}).get("features") or None,
+    )
     semantic_profiles = build_semantic_profile_export(
         profiles,
         run_id=profile_run_id,

@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from src.utils.constants import TODAS_VARIABLES
+from .profile_interpreter import interpret_feature_value
 from src.evaluation.feature_space import ALL_SAMPLES_V1, CLUSTERED_WITHOUT_NOISE_V1
 
 
@@ -192,6 +193,8 @@ def cluster_semantic_profiles(
         raise ValueError("labels debe contener identificadores enteros finitos.")
     labels_array = numeric_labels.astype(int, copy=False)
 
+    if feature_metadata is None:
+        feature_metadata = df.attrs.get("feature_metadata")
     metadata = TODAS_VARIABLES if feature_metadata is None else feature_metadata
     included = labels_array != -1 if exclude_noise else np.ones(len(labels_array), dtype=bool)
     if not included.any() or df.shape[1] == 0:
@@ -327,6 +330,8 @@ def _semantic_summary(
                 "minimum": float(values.min()),
                 "maximum": float(values.max()),
                 "global_reference": global_mean,
+                "representative_label": interpret_feature_value(base["feature_code"], mean, {base["feature_code"]: info}).text,
+                "global_reference_label": interpret_feature_value(base["feature_code"], global_mean, {base["feature_code"]: info}).text,
                 "difference_from_global": mean - global_mean,
                 "difference_unit": "processed_scale",
             }
@@ -438,6 +443,8 @@ def _cluster_name(cluster_id: int) -> str:
 
 
 def _positive_binary_value(info: Mapping[str, Any], values: pd.Series) -> float:
+    if "positive_processed_value" in info:
+        return float(info["positive_processed_value"])
     points = _category_points(info)
     if points:
         return float(points[-1][0])
@@ -494,6 +501,8 @@ def _category_mapping_status(
 
 
 def _category_points(info: Mapping[str, Any]) -> list[tuple[float, str]]:
+    if "processed_categories" in info:
+        return sorted((float(value), str(label)) for value, label in info["processed_categories"])
     categories = info.get("categorias") or {}
     if not categories:
         return []

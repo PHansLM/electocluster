@@ -103,7 +103,7 @@ def _profile_description(row, feature_type: str, code: str) -> str:
             f"{row.get('representative_label', 'Categoría')}: "
             f"{_number(row.get('representative_percentage'))} %"
         )
-    return interpret_feature_value(code, row.get("representative_value")).text
+    return row.get("representative_label") or interpret_feature_value(code, row.get("representative_value")).text
 
 
 def _reference_description(row, feature_type: str, code: str) -> str:
@@ -118,7 +118,7 @@ def _reference_description(row, feature_type: str, code: str) -> str:
             f"{row.get('global_reference_label', 'Categoría')}: "
             f"{_number(row.get('global_reference_percentage'))} %"
         )
-    return interpret_feature_value(code, row.get("global_reference")).text
+    return row.get("global_reference_label") or interpret_feature_value(code, row.get("global_reference")).text
 
 
 def difference_heatmap(rows: pd.DataFrame, feature_codes: list[str]) -> go.Figure:

@@ -30,7 +30,7 @@ from src.evaluation.feature_space import (
     build_metric_reading,
 )
 from src.evaluation.metrics import calculate_metrics, calculate_weighted_geometry_metrics
-from src.evaluation.provenance import build_run_provenance
+from src.evaluation.provenance import build_run_provenance, sha256_file
 from src.evaluation.results_manager import ResultsManager
 from src.utils.constants import PROCESSED_DATA_PATH
 from src.weighting.weight_manager import WeightManager
@@ -134,9 +134,15 @@ def run_clustering_experiment(
         result = _run_wdbscan(df, params, weight_manager)
 
     weights_snapshot = weight_manager.get_weights()
+    from src.preprocessing.profile_metadata import load_profile_metadata
+    profile_metadata = load_profile_metadata(dataset_path)
     result["metadata"] = {
         **result["metadata"],
         "implementation": describe_algorithm_implementation(algorithm),
+        "profile_reading": {
+            "dataset_sha256": sha256_file(dataset_path),
+            "features": profile_metadata,
+        },
         "provenance": build_run_provenance(
             dataset_path=dataset_path,
             df=df,

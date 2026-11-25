@@ -24,6 +24,7 @@ from src.evaluation.comparability import assess_run_comparability, run_evaluatio
 from src.evaluation.provenance import sha256_file, stored_dataset_sha256
 from src.evaluation.report_generator import ReportGenerator
 from src.evaluation.results_manager import ResultsManager
+from src.preprocessing.profile_metadata import load_profile_metadata, unverified_profile_metadata
 from src.ui import apply_app_shell
 from src.utils.constants import PROCESSED_DATA_PATH
 from src.visualization.plotly_config import (
@@ -370,7 +371,7 @@ def _format_profile_metadata(column: str, value) -> str:
     return str(value)
 
 
-def _render_profiles_table(profiles: pd.DataFrame):
+def _render_profiles_table(profiles: pd.DataFrame, feature_metadata=None):
     columns = profiles.columns.tolist()
     header_cells = []
     for column in columns:
@@ -387,7 +388,7 @@ def _render_profiles_table(profiles: pd.DataFrame):
                 cells.append(f"<td class='profile-meta'>{escape(_format_profile_metadata(column, value))}</td>")
                 continue
 
-            interpretation = interpret_feature_value(column, value)
+            interpretation = interpret_feature_value(column, value, feature_metadata)
             raw_value = _format_profile_raw(interpretation.raw_value)
             cells.append(
                 "<td>"
@@ -490,7 +491,7 @@ def _render_profiles_table(profiles: pd.DataFrame):
     st.markdown(html, unsafe_allow_html=True)
 
 
-def _descriptive_profiles_export(profiles: pd.DataFrame) -> pd.DataFrame:
+def _descriptive_profiles_export(profiles: pd.DataFrame, feature_metadata=None) -> pd.DataFrame:
     """Replica en CSV la lectura descriptiva de la tabla de perfiles."""
     export = pd.DataFrame(index=profiles.index)
     for column in profiles.columns:
@@ -507,8 +508,8 @@ def _descriptive_profiles_export(profiles: pd.DataFrame) -> pd.DataFrame:
 
         export[feature_display_name(column)] = profiles[column].map(
             lambda value: (
-                f"{interpret_feature_value(column, value).text} "
-                f"({_format_profile_raw(interpret_feature_value(column, value).raw_value)})"
+                f"{interpret_feature_value(column, value, feature_metadata).text} "
+                f"({_format_profile_raw(interpret_feature_value(column, value, feature_metadata).raw_value)})"
             )
         )
     return export
@@ -773,7 +774,12 @@ selected_run_id = st.selectbox(
 
 run = rm.load_run(selected_run_id)
 labels = rm.load_assignments(selected_run_id)
-df = load_processed_dataset()
+try:
+    df = load_processed_dataset()
+except (ValueError, OSError) as exc:
+    st.error(f"No se pueden consultar los resultados: {exc} Revisa Preprocesamiento antes de continuar.",
+             icon=":material/error:")
+    st.stop()
 stored_dataset_hash = stored_dataset_sha256(run)
 current_dataset_hash = sha256_file(PROCESSED_DATA_PATH)
 
@@ -843,11 +849,16 @@ with st.expander("Trazabilidad técnica de la ejecución", expanded=False):
         )
 
 distribution = cluster_distribution(labels)
+profile_feature_metadata = load_profile_metadata(PROCESSED_DATA_PATH, run)
+if not profile_feature_metadata:
+    st.info("Esta ejecución no dispone de la información de transformación necesaria para recuperar etiquetas y unidades originales. Se muestran los valores procesados.")
+    profile_feature_metadata = unverified_profile_metadata(df.columns)
+df.attrs["feature_metadata"] = profile_feature_metadata
 profiles = cluster_profiles(df, labels)
 projection = pca_projection(df, labels)
 profile_distances = cluster_profile_distance_matrix(df, labels)
 dimension_scores = cluster_dimension_scores(df, labels)
-semantic_profiles = cluster_semantic_profiles(df, labels)
+semantic_profiles = cluster_semantic_profiles(df, labels, feature_metadata=profile_feature_metadata)
 semantic_differences = profile_difference_rows(semantic_profiles)
 cluster_summaries = cluster_difference_summaries(semantic_differences)
 
@@ -965,12 +976,12 @@ with tab_dist:
                     or column in selected_profile_features
                 ]
             ]
-            _render_profiles_table(visible_profiles)
+            _render_profiles_table(visible_profiles, profile_feature_metadata)
             st.caption(
                 "Los CSV exportados mostrarán exactamente los grupos y características "
                 "que se ven en esta tabla."
             )
-        descriptive_csv = _descriptive_profiles_export(visible_profiles).to_csv(
+        descriptive_csv = _descriptive_profiles_export(visible_profiles, profile_feature_metadata).to_csv(
             index=False
         ).encode("utf-8")
         values_csv = visible_profiles.to_csv(index=False).encode("utf-8")
@@ -1202,7 +1213,7 @@ with tab_profile_analysis:
                     or column in selected_detail_features
                 ]
             ]
-            _render_profiles_table(detail_profile)
+            _render_profiles_table(detail_profile, profile_feature_metadata)
             st.caption(
                 f"Mostrando {len(selected_detail_features)} de "
                 f"{len(detail_feature_options)} características del grupo seleccionado."

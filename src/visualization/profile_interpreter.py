@@ -35,16 +35,15 @@ def feature_display_name(feature_code: str) -> str:
     return f"{name} ({feature_code})" if name else feature_code
 
 
-def interpret_feature_value(feature_code: str, value: Any) -> FeatureValueInterpretation:
+def interpret_feature_value(feature_code: str, value: Any, feature_metadata=None) -> FeatureValueInterpretation:
     """
     Traduce un valor procesado de perfil a una aproximacion legible.
 
-    Para categoricas se ubica el valor entre las categorias configuradas y se
-    calcula una proporcion lineal entre los dos puntos mas cercanos. Para
-    numericas se invierte la normalizacion min-max usando el rango configurado.
+    Usa el mapeo y la transformación registrados. Sin transformación numérica
+    verificable no se afirma una conversión a la escala original.
     """
     raw_value = _to_float(value)
-    info = TODAS_VARIABLES.get(feature_code)
+    info = (TODAS_VARIABLES if feature_metadata is None else feature_metadata).get(feature_code)
     if raw_value is None:
         return FeatureValueInterpretation("Sin valor", None, feature_code, "desconocido")
     if not info:
@@ -77,13 +76,10 @@ def _to_float(value: Any) -> float | None:
 
 
 def _interpret_numeric(value: float, info: dict) -> str:
-    value = _clamp(value, 0.0, 1.0)
-    rango = info.get("rango")
-    if not rango or len(rango) != 2:
+    inverse = info.get("numeric_inverse")
+    if inverse is None:
         return f"Valor procesado {_format_number(value)}"
-
-    min_value, max_value = float(rango[0]), float(rango[1])
-    original = min_value + value * (max_value - min_value)
+    original = float(inverse["offset"]) + value * float(inverse["scale"])
     return f"Aprox. {_format_number(original)} en escala original"
 
 
@@ -96,7 +92,8 @@ def _interpret_categorical(value: float, info: dict) -> str:
     if not points:
         return f"Valor procesado {_format_number(value)}"
 
-    value = _clamp(value, points[0][0], points[-1][0])
+    if value < points[0][0] - 1e-9 or value > points[-1][0] + 1e-9:
+        return f"Valor procesado {_format_number(value)}"
 
     for point, label in points:
         if abs(value - point) <= 1e-9:
@@ -130,6 +127,8 @@ def _interpret_categorical(value: float, info: dict) -> str:
 
 
 def _category_points(info: dict, categories: dict) -> list[tuple[float, str]]:
+    if "processed_categories" in info:
+        return sorted((float(value), str(label)) for value, label in info["processed_categories"])
     feature_type = info.get("tipo")
     if feature_type == "categorico_nominal":
         ordered_keys = sorted(categories, key=lambda item: str(item))
