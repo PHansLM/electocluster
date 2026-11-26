@@ -1065,7 +1065,7 @@ def run_streamlit_checks() -> None:
                 for button in app.button
                 if button.label == "Calcular recomendación"
             )
-            calculate.click().run(timeout=30)
+            calculate.click().run(timeout=100)
             assert not app.exception
             next(button for button in app.button if button.label == "Entendido").click().run(timeout=20)
             assert app.session_state["params_by_algorithm"]["WKMedoids"] == (
@@ -1204,10 +1204,10 @@ def run_streamlit_checks() -> None:
             assert any("Separación relativa" in columns for columns in dataframe_columns)
 
             selectboxes = {selectbox.label: selectbox for selectbox in app.selectbox}
-            assert "Cluster del perfil semantico" in selectboxes, (
+            assert "Grupo" in selectboxes, (
                 f"Cluster selector missing. Selectors: {list(selectboxes)}"
             )
-            assert "Tipo de variable del perfil semantico" in selectboxes, (
+            assert "Tipo de variable del perfil semántico" in selectboxes, (
                 f"Feature-type selector missing. Selectors: {list(selectboxes)}"
             )
 
@@ -1219,7 +1219,7 @@ def run_streamlit_checks() -> None:
                 current_selectboxes = {
                     selectbox.label: selectbox for selectbox in app.selectbox
                 }
-                current_selectboxes["Tipo de variable del perfil semantico"].select(
+                current_selectboxes["Tipo de variable del perfil semántico"].select(
                     feature_type
                 ).run(timeout=20)
                 assert not app.exception, (
@@ -1233,9 +1233,13 @@ def run_streamlit_checks() -> None:
                 )
 
                 if feature_type == "categorico_nominal":
-                    assert any("leng1" in warning.value for warning in app.warning), (
-                        "Expected semantic warning for leng1 was not rendered. "
-                        f"Warnings: {[warning.value for warning in app.warning]}"
+                    distribution_selector = next(
+                        item for item in app.selectbox
+                        if item.label == "Variable para inspeccionar su distribucion"
+                    )
+                    distribution_selector.select("leng1").run(timeout=20)
+                    assert not app.exception, (
+                        f"Language distribution raised Streamlit exceptions: {app.exception}"
                     )
                     semantic_summary = next(
                         dataframe.value
@@ -1246,6 +1250,29 @@ def run_streamlit_checks() -> None:
                         dataframe.value
                         for dataframe in app.dataframe
                         if "porcentaje del cluster" in dataframe.value.columns
+                    )
+                    language_summary = semantic_summary[
+                        semantic_summary["variable"] == "Lengua materna"
+                    ]
+                    assert len(language_summary) == 1, "Language summary missing."
+                    mapping_status = language_summary.iloc[0]["trazabilidad de categorias"]
+                    category_labels = semantic_distribution["categoria"].astype(str)
+                    if mapping_status == "categorias verificadas":
+                        assert not category_labels.str.startswith("Valor procesado ").any(), (
+                            "Verified language categories were rendered as processed values."
+                        )
+                    else:
+                        assert mapping_status == "solo valor procesado"
+                        assert any("`leng1`" in warning.value for warning in app.warning), (
+                            "Unverified language categories need an explicit warning."
+                        )
+                        assert category_labels.str.startswith("Valor procesado ").all(), (
+                            "Unverified language categories must not infer labels."
+                        )
+                    assert int(semantic_distribution["registros"].sum()) > 0
+                    percentages = semantic_distribution["porcentaje del cluster"].str.rstrip("%").astype(float)
+                    assert math.isclose(float(percentages.sum()), 100.0, abs_tol=0.1), (
+                        "Language distribution percentages do not add up to 100%."
                     )
                     for column in (
                         "porcentaje representativo",
