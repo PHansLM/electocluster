@@ -218,6 +218,7 @@ st.markdown("### Estado actual del dataset")
 
 processed_path = Path(PROCESSED_DATA_PATH)
 raw_path = Path(RAW_DATA_PATH)
+df_existing = None
 
 if processed_path.exists():
     mod_time = datetime.fromtimestamp(processed_path.stat().st_mtime)
@@ -793,3 +794,14 @@ else:
                     width="stretch",
                     hide_index=True,
                 )
+
+if df_existing is not None:
+    with st.container(border=True):
+        st.markdown("### Resultado del preprocesamiento")
+        result_columns = st.columns(3)
+        result_columns[0].metric("Registros", f"{len(df_existing):,}")
+        result_columns[1].metric("Variables", len(df_existing.columns))
+        result_columns[2].metric("Missings", int(df_existing.isna().sum().sum()))
+
+    with st.expander("Vista previa del dataset procesado", expanded=False):
+        st.dataframe(df_existing.head(10), width="stretch", hide_index=True)
