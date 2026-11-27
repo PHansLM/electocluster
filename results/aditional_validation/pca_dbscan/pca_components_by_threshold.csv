@@ -1,0 +1,9 @@
+space,target,n_components,cumulative_variance
+unweighted_processed,0.8,13,0.8090389993365427
+weighted_X_times_w,0.8,12,0.8082169629538299
+unweighted_processed,0.85,15,0.8560696911721146
+weighted_X_times_w,0.85,14,0.8510263555432129
+unweighted_processed,0.9,18,0.9084033536075856
+weighted_X_times_w,0.9,17,0.905077543593147
+unweighted_processed,0.95,22,0.9578897565115192
+weighted_X_times_w,0.95,21,0.9590020044942695

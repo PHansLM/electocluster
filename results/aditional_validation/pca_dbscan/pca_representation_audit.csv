@@ -1,0 +1,4 @@
+use,input,n_components,cumulative_variance
+traditional_dbscan,28_unweighted_features,18,0.9084033536075856
+weighted_dbscan,weighted_X_times_w,17,0.905077543593147
+2d_visualization,28_unweighted_features,2,0.28322240644728425
